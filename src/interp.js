@@ -1014,7 +1014,7 @@ class Interp {
       return { kind: "int", init, raw: String(v), text: init ? String(v) : "?" };
     }
     if (t.k === "struct") {
-      return { kind: "struct", fields: t.fields.map((f) => ({ name: f.name, type: typeName(f.type), offset: f.offset, size: sizeOf(f.type), ...this.cellFor(addr + f.offset, f.type) })) };
+      return { kind: "struct", fields: t.fields.map((f) => ({ name: f.name, type: typeName(f.type), ...this.cellFor(addr + f.offset, f.type) })) };
     }
     if (t.k === "arr") return { kind: "arr", text: `${typeName(t)}` };
     return { kind: "other", text: "?" };

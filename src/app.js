@@ -351,21 +351,12 @@ function renderMemory(anim = false) {
       if (c >= b.count) ghost.set(b.id, Math.max(ghost.get(b.id) || 0, c));
     }
   }
-  // pointers this step used to reach memory (s in s[i], cur in cur->next): their arrows are drawn bold
-  const derefNames = new Set();
-  for (const ev of s.events) {
-    if ((ev.k !== "r" && ev.k !== "w") || !ev.label || !/[[*>]/.test(ev.label)) continue;
-    const bare = ev.label.replace(/\((?:const\s+)?(?:unsigned\s+|signed\s+)?\w+\s*\*+\s*\)/g, "");
-    const m = /[A-Za-z_]\w*/.exec(bare);
-    if (m) derefNames.add(m[0]);
-  }
-  const touched = (addr, size) => s.events.some((ev) => (ev.k === "r" || ev.k === "w") && ev.addr < addr + size && addr < ev.addr + ev.size);
   const arrows = [];
   let colorN = 0;
-  const dot = (key, target, hot = false) => {
+  const dot = (key, target) => {
     if (!target || target.null || target.fn || target.wild) return "";
     const color = PTR[colorN++ % PTR.length];
-    arrows.push({ key, target, color, dangling: target.dead, hot });
+    arrows.push({ key, target, color, dangling: target.dead });
     return `<span class="dot" data-src="${key}" style="background:${color}"></span>`;
   };
   const ptrText = (c) => {
@@ -377,18 +368,15 @@ function renderMemory(anim = false) {
   };
   const topFrame = s.frames[s.frames.length - 1];
 
-  const varRow = (v, key, sub = false, blockId = null, hotHint = false) => {
+  const varRow = (v, key, sub = false, blockId = null) => {
     let val;
-    const inTop = topFrame && key.startsWith(topFrame.id + ".");
-    const used = inTop && !sub && derefNames.has(v.name);
     if (v.kind === "ptr") {
-      const hot = hotHint || used || (blockId != null && writtenBlocks.has(blockId));
-      val = `${dot(key, v.target, hot)}${ptrText(v)}`;
-      if (v.init && v.target && v.target.block && inTop) {
+      val = `${dot(key, v.target)}${ptrText(v)}`;
+      if (v.init && v.target && v.target.block && topFrame && key.startsWith(topFrame.id + ".")) {
         const b = blocks.get(v.target.block);
         if (b) mark(b.id, v.target.pastEnd ? b.count : Math.floor(v.target.off / b.elemSize), null, v.name);
       }
-    } else if (v.kind === "arr") val = `${dot(key, { block: v.block, off: 0 }, used)}<span class="unk">array</span>`;
+    } else if (v.kind === "arr") val = `${dot(key, { block: v.block, off: 0 })}<span class="unk">array</span>`;
     else if (v.kind === "struct") val = `<span class="unk">struct</span>`;
     else val = v.init ? esc(v.kind === "char" && S.expert ? `${v.num} '${v.text}'` : v.text) : '<span class="unk">?</span>';
     const changed = blockId != null && writtenBlocks.has(blockId);
@@ -429,13 +417,13 @@ function renderMemory(anim = false) {
         continue;
       }
       if (c.kind === "struct") {
-        cells += `<div class="scell ${cls}" data-cell="${b.id}:${k}"><div class="frame-h">${b.count > 1 ? `[${k}]` : "node"}<span>${esc(b.elem)}</span></div>${c.fields.map((f) => varRow(f, `b${b.id}.${k}.${f.name}`, false, null, touched(b.addr + k * b.elemSize + f.offset, f.size))).join("")}</div>`;
+        cells += `<div class="scell ${cls}" data-cell="${b.id}:${k}"><div class="frame-h">${b.count > 1 ? `[${k}]` : "node"}<span>${esc(b.elem)}</span></div>${c.fields.map((f) => varRow(f, `b${b.id}.${k}.${f.name}`, false)).join("")}</div>`;
         continue;
       }
       let inner, kcls = "";
       if (c.kind === "ptr") {
         const t = c.target;
-        inner = dot(`b${b.id}.${k}`, t, /read|write/.test(cls)) + (!c.init ? "?" : t && t.null ? '<span class="box small">NULL</span>' : t && (t.fn || t.wild) ? `<span class="box small">${esc(t.fn ? t.fn + "()" : c.text)}</span>` : "");
+        inner = dot(`b${b.id}.${k}`, t) + (!c.init ? "?" : t && t.null ? '<span class="box small">NULL</span>' : t && (t.fn || t.wild) ? `<span class="box small">${esc(t.fn ? t.fn + "()" : c.text)}</span>` : "");
         kcls = " wide";
       } else inner = esc(c.text);
       if (c.kind === "char" && c.init && c.raw === 0) kcls += " nul";
@@ -557,13 +545,12 @@ function flyCopies(mem, s, D) {
   }
 }
 
-// side arrows (target beside or above) loop out to the right, each in its own lane
-function arrowPath(sx, sy, ex, ey, side, lane = 0) {
+function arrowPath(sx, sy, ex, ey, side) {
   if (!side) {
     const bend = Math.max(24, (ey - sy) * 0.45);
     return `M ${sx} ${sy} C ${sx} ${sy + bend}, ${ex} ${ey - bend}, ${ex} ${ey}`;
   }
-  const out = Math.max(sx, ex) + 26 + lane * 12;
+  const out = Math.max(sx, ex) + 26;
   return `M ${sx} ${sy} C ${out} ${sy}, ${out} ${ey}, ${ex} ${ey}`;
 }
 
@@ -572,126 +559,52 @@ function drawArrows(animate, before) {
   if (!svg || !S.arrowList || S.tab !== "mem") return;
   const base = mem.getBoundingClientRect();
   const defs = "<defs>" + PTR.map((c, i) => `<marker id="am${i}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" style="fill:${c}"/></marker>`).join("") + "</defs>";
-  // resolve every arrow's two ends first, so arrows sharing a target can fan out
-  const items = [];
+  let paths = "";
+  const geom = {}, morphs = [];
   for (const a of S.arrowList) {
     const from = mem.querySelector(`[data-src="${CSS.escape(a.key)}"]`);
     if (!from) continue;
     const b = S.arrowBlocks.get(a.target.block);
-    const endId = b ? `cell:${b.id}:${a.target.pastEnd ? b.count : Math.floor(a.target.off / b.elemSize)}` : `var:${a.target.block}`;
-    const to = b ? mem.querySelector(`[data-cell="${endId.slice(5)}"]`) : mem.querySelector(`[data-varblock="${a.target.block}"]`);
-    if (to) items.push({ a, from, to, endId });
-  }
-  const byEnd = new Map();
-  for (const it of items) { if (!byEnd.has(it.endId)) byEnd.set(it.endId, []); byEnd.get(it.endId).push(it); }
-  S.arrowEnds = new Map(items.map((it) => [it.a.key, it.endId]));
-  let lanes = 0;
-  const geom = {}, morphs = [];
-  const groups = [];
-  for (const it of items) {
-    const { a, from, to } = it;
+    let to;
+    if (b) to = mem.querySelector(`[data-cell="${b.id}:${a.target.pastEnd ? b.count : Math.floor(a.target.off / b.elemSize)}"]`);
+    else to = mem.querySelector(`[data-varblock="${a.target.block}"]`);
+    if (!to) continue;
     const r1 = from.getBoundingClientRect(), r2 = to.getBoundingClientRect();
     const sx = r1.left + r1.width / 2 - base.left, sy = r1.top + r1.height / 2 - base.top;
     // below the source: drop in from above; beside or above: come in from the right edge
     const side = !(r2.top > r1.bottom + 8);
-    const peers = byEnd.get(it.endId), i = peers.indexOf(it), spread = i - (peers.length - 1) / 2;
-    const ex = (side ? r2.right - base.left + 2 : r2.left + Math.min(r2.width / 2, 20) - base.left) + (side ? 0 : spread * 8);
-    const ey = (side ? r2.top + r2.height / 2 - base.top : r2.top - base.top - 2) + (side ? spread * 6 : 0);
-    const g = { sx, sy, ex, ey, side, lane: side ? lanes++ : 0 };
+    const ex = side ? r2.right - base.left + 2 : r2.left + Math.min(r2.width / 2, 20) - base.left;
+    const ey = side ? r2.top + r2.height / 2 - base.top : r2.top - base.top - 2;
+    const g = { sx, sy, ex, ey, side };
     geom[a.key] = g;
     const old = animate && before && before.geom[a.key];
     const moved = old && (Math.abs(old.ex - ex) + Math.abs(old.ey - ey) + Math.abs(old.sx - sx) + Math.abs(old.sy - sy) > 1);
     const fresh = animate && !old && !reduceMotion();
     if (moved) morphs.push({ key: a.key, from: old, to: g });
-    const d = moved ? arrowPath(old.sx, old.sy, old.ex, old.ey, side, g.lane) : arrowPath(sx, sy, ex, ey, side, g.lane);
-    const draw = fresh ? " draw" : "";
-    // a casing in the panel colour under each line leaves a gap where arrows cross
-    groups.push({ hot: a.hot, html: `<g class="arrow ${a.hot ? "hot" : "cold"}${a.dangling ? " dang" : ""}" data-akey="${esc(a.key)}" data-end="${esc(it.endId)}"><path class="case${draw}" d="${d}"/><path class="line${draw}" d="${d}" style="stroke:${a.dangling ? "var(--bad)" : a.color}" marker-end="url(#am${PTR.indexOf(a.color)})"/></g>` });
+    const d = moved ? arrowPath(old.sx, old.sy, old.ex, old.ey, side) : arrowPath(sx, sy, ex, ey, side);
+    paths += `<path data-akey="${esc(a.key)}" class="${fresh ? "draw" : ""}${a.dangling ? " dang" : ""}" d="${d}" style="stroke:${a.dangling ? "var(--bad)" : a.color}" marker-end="url(#am${PTR.indexOf(a.color)})"/>`;
   }
-  // faded arrows underneath, this step's arrows on top
-  groups.sort((x, y) => x.hot - y.hot);
-  svg.innerHTML = defs + groups.map((g) => g.html).join("");
-  svg.classList.toggle("has-hot", groups.some((g) => g.hot));
+  svg.innerHTML = defs + paths;
   svg.querySelectorAll("path.draw").forEach((p) => { const L = p.getTotalLength(); p.style.setProperty("--len", L); p.style.strokeDasharray = L; });
   S.arrowGeom = geom;
-  applyFocus();
   if (morphs.length) morphArrows(svg, morphs);
 }
 
 // a pointer that moved slides its arrow head to the new target
 function morphArrows(svg, morphs) {
   const D = dur(), t0 = performance.now();
-  const els = morphs.map((m) => [...svg.querySelectorAll(`[data-akey="${CSS.escape(m.key)}"] path`)]);
+  const els = morphs.map((m) => svg.querySelector(`[data-akey="${CSS.escape(m.key)}"]`));
   const ease = (t) => 1 - Math.pow(1 - t, 3);
   const lerp = (a, b, t) => a + (b - a) * t;
   (function frame(now) {
     const t = Math.min(1, (now - t0) / D), e = ease(t);
     morphs.forEach((m, k) => {
-      const d = arrowPath(lerp(m.from.sx, m.to.sx, e), lerp(m.from.sy, m.to.sy, e), lerp(m.from.ex, m.to.ex, e), lerp(m.from.ey, m.to.ey, e), m.to.side, m.to.lane);
-      for (const p of els[k]) if (p.isConnected) p.setAttribute("d", d);
+      if (!els[k] || !els[k].isConnected) return;
+      els[k].setAttribute("d", arrowPath(lerp(m.from.sx, m.to.sx, e), lerp(m.from.sy, m.to.sy, e), lerp(m.from.ex, m.to.ex, e), lerp(m.from.ey, m.to.ey, e), m.to.side));
     });
     if (t < 1) requestAnimationFrame(frame);
   })(t0);
 }
-
-/* ---------------- following one arrow: hover to peek, tap to pin ---------------- */
-
-// keys of arrows that start at, or end on, the element under the pointer
-function arrowsAt(el) {
-  const keys = new Set();
-  if (!el || !S.arrowEnds) return keys;
-  const vv = el.closest(".var") && el.closest(".var").querySelector("[data-vkey]");
-  const cell = el.closest("[data-cell]");
-  const ends = [];
-  if (vv) {
-    keys.add(vv.dataset.vkey);
-    if (vv.dataset.varblock) ends.push(`var:${vv.dataset.varblock}`);
-  }
-  if (cell && !el.closest(".var")) {
-    keys.add(`b${cell.dataset.cell.replace(":", ".")}`);
-    ends.push(`cell:${cell.dataset.cell}`);
-  }
-  for (const [k, end] of S.arrowEnds) if (ends.includes(end)) keys.add(k);
-  for (const k of [...keys]) if (!S.arrowEnds.has(k)) keys.delete(k);
-  return keys;
-}
-
-function applyFocus() {
-  const svg = $("arrows"), mem = $("mem");
-  if (!svg) return;
-  const wanted = S.peekKeys && S.peekKeys.size ? S.peekKeys : S.pinKeys || new Set();
-  // a pinned pointer whose frame has returned simply stops being highlighted
-  const keys = new Set([...wanted].filter((k) => S.arrowEnds && S.arrowEnds.has(k)));
-  svg.classList.toggle("focusing", keys.size > 0);
-  mem.querySelectorAll(".focus-end").forEach((n) => n.classList.remove("focus-end"));
-  for (const g of svg.querySelectorAll("g.arrow")) {
-    const on = keys.has(g.dataset.akey);
-    g.classList.toggle("focus", on);
-    if (!on) continue;
-    const end = g.dataset.end;
-    const target = end.startsWith("cell:") ? mem.querySelector(`[data-cell="${end.slice(5)}"]`) : mem.querySelector(`[data-varblock="${end.slice(4)}"]`);
-    if (target) target.classList.add("focus-end");
-    const src = mem.querySelector(`[data-src="${CSS.escape(g.dataset.akey)}"]`);
-    if (src) src.classList.add("focus-end");
-  }
-  $("pinHint").textContent = S.pinKeys && S.pinKeys.size ? "Following a pointer · tap empty space to stop" : "Hover or tap a pointer to follow its arrow";
-}
-
-$("mem").addEventListener("mouseover", (e) => {
-  const keys = arrowsAt(e.target);
-  const same = S.peekKeys && keys.size === S.peekKeys.size && [...keys].every((k) => S.peekKeys.has(k));
-  if (same) return;
-  S.peekKeys = keys;
-  applyFocus();
-});
-$("mem").addEventListener("mouseleave", () => { S.peekKeys = null; applyFocus(); });
-$("mem").addEventListener("click", (e) => {
-  const keys = arrowsAt(e.target);
-  const same = S.pinKeys && keys.size && [...keys].every((k) => S.pinKeys.has(k));
-  S.pinKeys = keys.size && !same ? keys : null;
-  S.peekKeys = null;
-  applyFocus();
-});
 if (window.ResizeObserver) new ResizeObserver(() => drawArrows(false)).observe($("mem"));
 
 /* ---------------- flow ---------------- */

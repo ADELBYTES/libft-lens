@@ -311,19 +311,3 @@ code, .mono, .hl, #code, .gutter, .proto, .code-ro, .out, .step pre, .flow, .mem
 @keyframes leakpulse { 50% { box-shadow: 0 0 0 4px var(--bad-soft); } }
 .flow .focus { fill: none; stroke: var(--accent); stroke-width: 2; stroke-dasharray: 4 3; opacity: .8; }
 @media (prefers-reduced-motion: reduce) { .curbar.glide { transition: none; } }
-
-/* ---------- readable arrows: casing, this step's pointers, follow one ---------- */
-.arrows .case { stroke: var(--panel); stroke-width: 6; stroke-linecap: round; }
-.arrows .line { stroke-width: 2; transition: stroke-width .15s; }
-.arrows g.arrow { transition: opacity .15s; }
-.arrows g.dang .line { stroke-dasharray: 4 3; }
-.arrows.has-hot g.cold { opacity: .38; }
-.arrows g.hot .line { stroke-width: 2.8; }
-.arrows.focusing g.arrow { opacity: .08; }
-.arrows.focusing g.arrow.focus { opacity: 1; }
-.arrows.focusing g.focus .line { stroke-width: 3.2; }
-.mem .focus-end { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 5px; }
-.mem .dot.focus-end { outline-offset: 1px; border-radius: 50%; }
-.mem .var, .mem .cell, .mem .scell { cursor: pointer; }
-.legend .pin-hint { margin-left: auto; font-style: italic; }
-@media (max-width: 960px) { .legend .pin-hint { margin-left: 0; flex-basis: 100%; } }
