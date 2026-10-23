@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>libft Lens</title>
+<meta name="description" content="Step through your own C for libft: memory, pointers and control flow, with hints that never write the code for you.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<header class="top">
+  <h1 class="brand">libft Lens</h1>
+  <p class="sub">Write your own C, then watch the bytes, the pointers and the logic move.</p>
+  <div class="top-actions">
+    <label class="sel"><span>Example</span>
+      <select id="sample"></select>
+    </label>
+    <button id="restore" class="link" hidden>Restore my code</button>
+  </div>
+</header>
+
+<nav class="rail" id="rail" aria-label="Walkthrough order"></nav>
+
+<section class="panel" aria-label="Run controls">
+  <div class="bar">
+    <button id="run" class="run">Run main</button>
+    <div class="ctrls">
+      <button id="bFirst" aria-label="First step"><svg viewBox="0 0 16 16"><path d="M3 2h2v12H3zM14 2v12L6 8z"/></svg></button>
+      <button id="bPrev" aria-label="Previous step"><svg viewBox="0 0 16 16"><path d="M12 2v12L3 8z"/></svg></button>
+      <button id="bPlay" class="primary" aria-label="Play">Play</button>
+      <button id="bNext" aria-label="Next step"><svg viewBox="0 0 16 16"><path d="M4 2v12l9-6z"/></svg></button>
+      <button id="bLast" aria-label="Last step"><svg viewBox="0 0 16 16"><path d="M11 2h2v12h-2zM2 2v12l8-6z"/></svg></button>
+    </div>
+    <div class="scrub"><input type="range" id="scrub" min="0" max="0" value="0" aria-label="Step"><span class="count" id="count">not running</span></div>
+  </div>
+  <div class="narr" id="narr" aria-live="polite"></div>
+</section>
+
+<main class="grid">
+  <div class="col">
+    <section class="panel">
+      <div class="panel-h"><h2>Your code</h2><span class="hint" id="edhint">edits are saved in this browser</span></div>
+      <div class="panel-b">
+        <div class="editor" id="editor">
+          <div class="gutter" id="gutter" aria-hidden="true"></div>
+          <div class="ed-main">
+            <pre class="hl" id="hl" aria-hidden="true"></pre>
+            <textarea id="code" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="C source code"></textarea>
+          </div>
+        </div>
+        <div class="driver" id="driver" hidden>
+          <div class="driver-h"><span id="driverTitle">Test driver</span><button class="link" id="driverClose">Back to my main</button></div>
+          <pre class="code-ro" id="driverCode"></pre>
+        </div>
+      </div>
+    </section>
+    <section class="panel">
+      <div class="panel-h"><h2>Output</h2><span class="hint">what printf and write printed</span></div>
+      <div class="panel-b"><pre class="out" id="out"></pre></div>
+    </section>
+  </div>
+  <div class="col">
+    <section class="panel">
+      <div class="panel-h"><h2>Memory</h2><span class="hint">arrows are pointers</span></div>
+      <div class="panel-b">
+        <div class="mem" id="mem"></div>
+        <div class="legend">
+          <span><i class="lg read"></i>read</span>
+          <span><i class="lg write"></i>written</span>
+          <span><i class="lg nul"></i>'\0' terminator</span>
+          <span><i class="lg uninit"></i>never written</span>
+          <span><i class="lg bad"></i>out of bounds</span>
+          <span><i class="lg leak"></i>leaked</span>
+        </div>
+      </div>
+    </section>
+  </div>
+  <div class="col side">
+    <section class="panel">
+      <div class="panel-h"><h2>Logic flow</h2><span class="hint" id="flowhint"></span></div>
+      <div class="panel-b flow" id="flow"></div>
+    </section>
+    <section class="panel">
+      <div class="panel-h"><h2>Path to pass</h2><span class="hint" id="pathhint"></span></div>
+      <div class="panel-b" id="path"></div>
+    </section>
+  </div>
+</main>
+
+<footer class="foot">
+  Runs entirely in your browser with a C interpreter built for libft: integers, pointers, arrays, structs, malloc and free.
+  No floats, unions, enums or switch yet. Always confirm with <code>cc -Wall -Wextra -Werror</code> and norminette.
+</footer>
+
+<script type="module" src="src/app.js"></script>
+</body>
+</html>
