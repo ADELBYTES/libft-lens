@@ -4,8 +4,6 @@
 
 export const LIST_PRELUDE = "typedef struct s_list { void *content; struct s_list *next; } t_list;\n";
 
-export const WALKTHROUGH = ["ft_isalpha", "ft_strlen", "ft_memset", "ft_memmove", "ft_strdup", "ft_split", "ft_lstnew"];
-
 const W = "write", M = "malloc", F = "free";
 
 export const CATALOG = {
@@ -45,7 +43,7 @@ export const CATALOG = {
   ft_putnbr_fd: { part: 2, proto: "void ft_putnbr_fd(int n, int fd);", allowed: [W] },
   ft_lstnew: { part: 3, proto: "t_list *ft_lstnew(void *content);", allowed: [M] },
   ft_lstadd_front: { part: 3, proto: "void ft_lstadd_front(t_list **lst, t_list *new);", allowed: [] },
-  ft_lstsize: { part: 3, proto: "int ft_lstsize(t_list *lst);", allowed: [] },
+  ft_lstsize: { part: 3, proto: "unsigned int ft_lstsize(t_list *lst);", allowed: [] },
   ft_lstlast: { part: 3, proto: "t_list *ft_lstlast(t_list *lst);", allowed: [] },
   ft_lstadd_back: { part: 3, proto: "void ft_lstadd_back(t_list **lst, t_list *new);", allowed: [] },
   ft_lstdelone: { part: 3, proto: "void ft_lstdelone(t_list *lst, void (*del)(void *));", allowed: [F] },
@@ -54,19 +52,20 @@ export const CATALOG = {
   ft_lstmap: { part: 3, proto: "t_list *ft_lstmap(t_list *lst, void *(*f)(void *), void (*del)(void *));", allowed: [M, F] },
 };
 
-const T = (name, body) => ({ name, code: `int\tmain(void)\n{\n${body.trim().split("\n").map((l) => "\t" + l.trim()).join("\n")}\n\treturn (0);\n}\n` });
+// a test driver: optional helper code, then a main running the checks
+const T = (name, body, pre = "") => ({ name, code: `${pre ? pre.trim() + "\n\n" : ""}int\tmain(void)\n{\n${body.trim().split("\n").map((l) => "\t" + l.trim()).join("\n")}\n\treturn (0);\n}\n` });
 
 const charTests = (fn, yes, no) => [
-  T(`returns non-zero for ${yes.join(" ")}`, yes.map((c) => `__expect_bool(${fn}('${c}'), 1, "${fn}('${c}')");`).join("\n")),
-  T("returns 0 for the neighbours", no.map((c) => `__expect_bool(${fn}(${c}), 0, "${fn}(${c})");`).join("\n")),
+  T(`returns 1 for ${yes.join(" ")}`, yes.map((c) => `__expect_int(${fn}('${c}'), 1, "${fn}('${c}')");`).join("\n")),
+  T("returns 0 for the neighbours", no.map((c) => `__expect_int(${fn}(${c}), 0, "${fn}(${c})");`).join("\n")),
 ];
 
 export const TESTS = {
   ft_isalpha: charTests("ft_isalpha", ["a", "z", "A", "Z", "m"], ["'@'", "'['", "'`'", "'{'", "'0'", "0", "200"]),
   ft_isdigit: charTests("ft_isdigit", ["0", "5", "9"], ["'/'", "':'", "'a'", "0"]),
   ft_isalnum: charTests("ft_isalnum", ["0", "9", "a", "Z"], ["'/'", "':'", "'@'", "'['", "' '"]),
-  ft_isascii: [T("0 to 127 yes, others no", `__expect_bool(ft_isascii(0), 1, "ft_isascii(0)");\n__expect_bool(ft_isascii(127), 1, "ft_isascii(127)");\n__expect_bool(ft_isascii(128), 0, "ft_isascii(128)");\n__expect_bool(ft_isascii(-1), 0, "ft_isascii(-1)");`)],
-  ft_isprint: [T("space to ~ only", `__expect_bool(ft_isprint(' '), 1, "ft_isprint(' ')");\n__expect_bool(ft_isprint('~'), 1, "ft_isprint('~')");\n__expect_bool(ft_isprint(31), 0, "ft_isprint(31)");\n__expect_bool(ft_isprint(127), 0, "ft_isprint(127)");`)],
+  ft_isascii: [T("0 to 127 yes, others no", `__expect_int(ft_isascii(0), 1, "ft_isascii(0)");\n__expect_int(ft_isascii(127), 1, "ft_isascii(127)");\n__expect_int(ft_isascii(128), 0, "ft_isascii(128)");\n__expect_int(ft_isascii(-1), 0, "ft_isascii(-1)");`)],
+  ft_isprint: [T("space to ~ only", `__expect_int(ft_isprint(' '), 1, "ft_isprint(' ')");\n__expect_int(ft_isprint('~'), 1, "ft_isprint('~')");\n__expect_int(ft_isprint(31), 0, "ft_isprint(31)");\n__expect_int(ft_isprint(127), 0, "ft_isprint(127)");`)],
   ft_toupper: [T("only changes a to z", `__expect_int(ft_toupper('a'), 'A', "ft_toupper('a')");\n__expect_int(ft_toupper('z'), 'Z', "ft_toupper('z')");\n__expect_int(ft_toupper('A'), 'A', "ft_toupper('A')");\n__expect_int(ft_toupper('{'), '{', "ft_toupper('{')");`)],
   ft_tolower: [T("only changes A to Z", `__expect_int(ft_tolower('A'), 'a', "ft_tolower('A')");\n__expect_int(ft_tolower('Z'), 'z', "ft_tolower('Z')");\n__expect_int(ft_tolower('a'), 'a', "ft_tolower('a')");\n__expect_int(ft_tolower('['), '[', "ft_tolower('[')");`)],
   ft_strlen: [
@@ -171,76 +170,49 @@ export const TESTS = {
     T("appends at the end", `t_list\ta;\nt_list\tn;\nt_list\t*head;\n\na.next = 0;\nn.next = 0;\nhead = &a;\nft_lstadd_back(&head, &n);\n__expect_ptr(a.next, &n, "a.next");`),
     T("empty list", `t_list\tn;\nt_list\t*head;\n\nn.next = 0;\nhead = 0;\nft_lstadd_back(&head, &n);\n__expect_ptr(head, &n, "head");`),
   ],
+  ft_memchr: [
+    T("finds a byte", `char\tb[6] = "a\\0bcd";\n__expect_ptr(ft_memchr(b, 'c', 5), b + 3, "ft_memchr(b, 'c', 5)");`),
+    T("does not stop at '\\\\0'", `char\tb[4] = "a\\0b";\n__expect_ptr(ft_memchr(b, 'b', 3), b + 2, "ft_memchr(\\"a\\\\0b\\", 'b', 3)");`),
+    T("stays within n", `char\tb[4] = "abc";\n__expect_ptr(ft_memchr(b, 'c', 2), 0, "ft_memchr(b, 'c', 2)");`),
+  ],
+  ft_memcmp: [
+    T("equal buffers", `__expect_int(ft_memcmp("abc", "abc", 3), 0, "ft_memcmp(\\"abc\\", \\"abc\\", 3)");`),
+    T("first difference decides", `__expect_sign(ft_memcmp("abd", "abc", 3), 1, "ft_memcmp(\\"abd\\", \\"abc\\", 3)");\n__expect_sign(ft_memcmp("a\\x80", "a\\x01", 2), 1, "ft_memcmp(\\"a\\\\x80\\", \\"a\\\\x01\\", 2)");`),
+    T("keeps going past '\\\\0'", `char\ta[3] = "a\\0b";\nchar\tb[3] = "a\\0c";\n__expect_sign(ft_memcmp(a, b, 3), -1, "ft_memcmp(\\"a\\\\0b\\", \\"a\\\\0c\\", 3)");`),
+  ],
+  ft_strnstr: [
+    T("finds inside len", `char\t*s = "lorem ipsum";\n__expect_ptr(ft_strnstr(s, "ips", 11), s + 6, "ft_strnstr(s, \\"ips\\", 11)");`),
+    T("match crosses len", `__expect_ptr(ft_strnstr("lorem ipsum", "ips", 7), 0, "ft_strnstr(s, \\"ips\\", 7)");`),
+    T("empty little", `char\t*s = "abc";\n__expect_ptr(ft_strnstr(s, "", 2), s, "ft_strnstr(s, \\"\\", 2)");`),
+  ],
+  ft_strmapi: [
+    T("applies f with the index", `char\t*r;\n\nr = ft_strmapi("abcd", up_odd);\n__expect_str(r, "aBcD", "ft_strmapi(\\"abcd\\", up_odd)");\nfree(r);`,
+      "static char\tup_odd(unsigned int i, char c)\n{\n\tif (i % 2)\n\t\treturn (c - 32);\n\treturn (c);\n}"),
+  ],
+  ft_striteri: [
+    T("changes characters in place", `char\ts[4] = "abc";\n\nft_striteri(s, upper_first);\n__expect_str(s, "Abc", "s after ft_striteri");`,
+      "static void\tupper_first(unsigned int i, char *c)\n{\n\tif (i == 0)\n\t\t*c = *c - 32;\n}"),
+  ],
+  ft_lstdelone: [
+    T("frees content and node", `t_list\t*n;\n\nn = malloc(sizeof(t_list));\nn->content = malloc(4);\nn->next = 0;\nft_lstdelone(n, del_content);\n__expect_int(1, 1, "ft_lstdelone returned; the leak check confirms both blocks were freed");`,
+      "static void\tdel_content(void *p)\n{\n\tfree(p);\n}"),
+  ],
+  ft_lstclear: [
+    T("frees every node and sets the head to NULL", `t_list\t*head;\nt_list\t*n;\nint\t\ti;\n\nhead = 0;\ni = 0;\nwhile (i < 3)\n{\nn = malloc(sizeof(t_list));\nn->content = malloc(2);\nn->next = head;\nhead = n;\ni++;\n}\nft_lstclear(&head, del_content);\n__expect_ptr(head, 0, "head after ft_lstclear");`,
+      "static void\tdel_content(void *p)\n{\n\tfree(p);\n}"),
+  ],
+  ft_lstiter: [
+    T("calls f on each content", `int\t\tv[2] = {1, 5};\nt_list\ta;\nt_list\tb;\n\na.content = &v[0];\na.next = &b;\nb.content = &v[1];\nb.next = 0;\nft_lstiter(&a, bump);\n__expect_int(v[0], 2, "first content");\n__expect_int(v[1], 6, "second content");`,
+      "static void\tbump(void *p)\n{\n\t*(int *)p += 1;\n}"),
+  ],
+  ft_lstmap: [
+    T("builds a new list", `t_list\ta;\nt_list\tb;\nt_list\t*r;\nt_list\t*next;\n\na.content = "ab";\na.next = &b;\nb.content = "cd";\nb.next = 0;\nr = ft_lstmap(&a, dup_upper, free_content);\n__expect_str(r->content, "Ab", "first content");\n__expect_str(r->next->content, "Cd", "second content");\n__expect_ptr(r->next->next, 0, "end of the new list");\n__expect_str(a.content, "ab", "original list unchanged");\nwhile (r)\n{\nnext = r->next;\nfree(r->content);\nfree(r);\nr = next;\n}`,
+      "static void\t*dup_upper(void *p)\n{\n\tchar\t*s;\n\n\ts = strdup(p);\n\ts[0] = s[0] - 32;\n\treturn (s);\n}\n\nstatic void\tfree_content(void *p)\n{\n\tfree(p);\n}"),
+  ],
 };
 
-// Milestones and three-level hints: question, concept, plain-language next step.
-export const GUIDE = {
-  ft_isalpha: [
-    { t: "Match the prototype", d: "It takes an int and returns an int, like the real isalpha." },
-    { t: "Describe a letter as ranges", d: "Letters are two runs of consecutive codes.",
-      hints: ["Look at an ASCII table. Where do the lowercase letters start and end? And the uppercase ones?",
-        "Characters are just numbers. 'a' to 'z' are consecutive, and so are 'A' to 'Z'. The characters between 'Z' and 'a' are not letters.",
-        "Return true when c is inside the uppercase range or inside the lowercase range. Return 0 for everything else."] },
-    { t: "Check the boundaries", d: "'@', '[', '`' and '{' sit just outside the ranges.",
-      hints: ["Which characters come right before 'A' and right after 'z'? Does your function reject them?",
-        "Off-by-one mistakes happen at the edges of a range. Inclusive comparisons keep both ends inside.",
-        "Test your condition with the four neighbour characters by hand before running."] },
-  ],
-  ft_strlen: [
-    { t: "Match the prototype", d: "const char * in, size_t out." },
-    { t: "Pick what you count with", d: "One variable can be both the counter and the index.",
-      hints: ["What has to change each time you look at the next character?",
-        "An index starts at the first character and moves one position at a time. Its final value can also be the answer.",
-        "Start a counter at zero and move forward one character per loop pass."] },
-    { t: "Stop at the terminator", d: "The loop ends on '\\0', not before and not after.",
-      hints: ["In the memory pane, what is stored in the last cell of every string?",
-        "C strings have no stored length. The only way to know where one ends is the '\\0' byte.",
-        "Keep going while the current character is not the terminator, then return how far you got."] },
-  ],
-  ft_memset: [
-    { t: "Match the prototype", d: "void * in, void * out, int value, size_t count." },
-    { t: "Write bytes, not ints", d: "You cannot index a void pointer.",
-      hints: ["What happens when you try to index s directly? What size would each step be?",
-        "void * has no element size. To touch single bytes, view the memory through a pointer to unsigned char.",
-        "Make a byte pointer to s, then set n bytes one by one to c converted to unsigned char."] },
-    { t: "Return the original pointer", d: "The caller gets s back, not where you stopped.",
-      hints: ["After your loop, where does your byte pointer point? Is that what the subject asks you to return?",
-        "If you move the pointer itself, you lose the start address. An index keeps the start intact.",
-        "Return s itself at the end."] },
-  ],
-  ft_memmove: [
-    { t: "Match the prototype", d: "void pointers in, void pointer out." },
-    { t: "Copy bytes one at a time", d: "Cast to unsigned char so each step moves exactly one byte." },
-    { t: "Survive overlapping memory", d: "The overlap test fails when dst starts inside src.",
-      hints: ["Run the overlap test and step to the third copy. Which byte did you read, and when was it last written?",
-        "When dst starts after src in the same buffer, copying from the front overwrites source bytes before you get to read them. The direction of the copy decides which bytes are still safe to read.",
-        "Before copying, compare the two addresses. If dst comes after src, walk from the last byte down to the first. Otherwise walk forward."] },
-    { t: "Cover the edge cases", d: "len of 0, dst equal to src, both pointers NULL." },
-  ],
-  ft_strdup: [
-    { t: "Match the prototype", d: "Takes a const string, returns a new one." },
-    { t: "Allocate the right size", d: "Every byte of the copy must fit in your block.",
-      hints: ["Count the cells of the string literal in the memory pane. How many bytes does it really occupy?",
-        "strlen counts the characters before the terminator. A C string needs one extra byte to hold '\\0', and malloc gives exactly what you ask for, never more.",
-        "Ask malloc for the length of s plus room for the terminator. Check the result for NULL before using it."] },
-    { t: "Copy, then terminate", d: "The copy must end with its own '\\0'." },
-  ],
-  ft_split: [
-    { t: "Count the words first", d: "You need the size of the outer array before filling it.",
-      hints: ["For \"  ab cd e\" and ' ', how many words are there? How did you know where each one starts?",
-        "A word starts where a non-separator follows a separator, or at the start of the string. Counting those starts gives the word count.",
-        "Walk the string once and count word starts. Allocate that many pointers plus one for the final NULL."] },
-    { t: "Allocate each word", d: "Each word gets its own block, including its '\\0'." },
-    { t: "Free everything on failure", d: "If one malloc fails, free the words you already made.",
-      hints: ["If the third malloc returns NULL, which blocks are still allocated?",
-        "Every successful malloc must be matched by a free on every path, including the error path.",
-        "When an allocation fails, free the words made so far, then the outer array, and return NULL."] },
-  ],
-  ft_lstnew: [
-    { t: "Allocate one node", d: "sizeof the struct, not of a pointer to it.",
-      hints: ["In the memory pane, how many bytes does one t_list take? How many does a pointer take?",
-        "sizeof(t_list *) is the size of an address. You need room for the whole struct: content and next.",
-        "Ask malloc for the size of one t_list and check the result."] },
-    { t: "Fill both fields", d: "content from the argument, next set to NULL." },
-  ],
-};
+// calloc rules from the subject: a size of 0 still gives a pointer free() accepts
+TESTS.ft_calloc.push(
+  T("zero size gives a freeable pointer", `void\t*p;\n\np = ft_calloc(0, 4);\n__expect_bool(p != 0, 1, "ft_calloc(0, 4) is not NULL");\nfree(p);`),
+  T("refuses an overflowing size", `__expect_ptr(ft_calloc(SIZE_MAX, 2), 0, "ft_calloc(SIZE_MAX, 2)");`),
+);

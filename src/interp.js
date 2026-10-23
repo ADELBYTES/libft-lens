@@ -471,6 +471,8 @@ class Interp {
 
   step(kind, node, line, file, extra) {
     this.tick(node, line, file);
+    // linked library code runs without being recorded step by step
+    if (this.opts.quietFiles && this.opts.quietFiles.includes(file)) return;
     this.snap(kind, node, line, file, extra);
   }
 
@@ -579,7 +581,7 @@ class Interp {
     if (r && r.ret) ret = rt.k === "void" ? { t: T.void } : this.convert(r.val, rt, `the value returned by ${f.name}()`);
     else if (rt.k !== "void") {
       if (f.name === "main") ret = intv(0);
-      else { this.warn(`${f.name}() reached its closing } without a return. The caller gets a garbage value.`); ret = { t: rt, v: rt.k === "ptr" ? 0xdeadbeef : 0n, garbage: true }; }
+      else { this.warn(`${f.name}() reached its closing } without a return. The caller gets a garbage value.`); ret = { t: rt, v: rt.k === "ptr" ? 0xdeadbeef : wrap(0xbebebeben, rt), garbage: true }; }
     } else ret = { t: T.void };
     this.line = f.endLine;
     this.step("return", f.exitId, f.endLine, f.file, { retVal: ret.t.k === "void" ? null : this.valueText(ret), retFn: f.name });

@@ -45,7 +45,8 @@ export function checkFunction(program, fnItem) {
   // a helper outside the subject may use anything some libft function may use
   const allowed = new Set(CATALOG[fnItem.name] ? CATALOG[fnItem.name].allowed : ["malloc", "free", "write"]);
   // helpers you wrote yourself are always fine; anything else must be in the subject's list
-  res.forbidden = callsIn(fnItem).filter((c) => !userFns.has(c.name) && !allowed.has(c.name) && !isLocalFnPtr(fnItem, c.name));
+  // other libft functions are part of the library, so calling them is always fine
+  res.forbidden = callsIn(fnItem).filter((c) => !userFns.has(c.name) && !CATALOG[c.name] && !allowed.has(c.name) && !isLocalFnPtr(fnItem, c.name));
   res.forbidden.forEach((c) => (c.builtin = BUILTIN_NAMES.includes(c.name)));
   return res;
 }

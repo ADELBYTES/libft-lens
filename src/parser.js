@@ -16,8 +16,6 @@ const BIN_PREC = {
 };
 const ASSIGN_OPS = new Set(["=", "+=", "-=", "*=", "/=", "%=", "<<=", ">>=", "&=", "|=", "^="]);
 
-let idCounter = 1;
-
 // `prelude` is parsed first, on line 0, so it can supply typedefs (t_list)
 // without shifting the student's line numbers.
 export function parse(src, { file = "main", prelude = "" } = {}) {
@@ -26,6 +24,8 @@ export function parse(src, { file = "main", prelude = "" } = {}) {
   let i = 0;
   const typedefs = new Map(Object.entries(BUILTIN_TYPEDEFS));
   const structs = new Map();
+  // ids restart for every parse so the same source gets the same ids in the page and in the worker
+  let idCounter = 1;
   const newId = () => idCounter++;
 
   const peek = (o = 0) => toks[Math.min(i + o, toks.length - 1)];

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>libft Lens</title>
-<meta name="description" content="Step through your own C for libft: memory, pointers and control flow, with hints that never write the code for you.">
+<meta name="description" content="Write libft yourself and watch it run: memory, pointers and control flow, with hints that never write the code for you.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@400;600&display=swap">
@@ -13,36 +13,25 @@
 <body>
 <header class="top">
   <h1 class="brand">libft Lens</h1>
-  <p class="sub">Write your own C, then watch the bytes, the pointers and the logic move.</p>
+  <div class="modes" role="tablist" aria-label="Mode">
+    <button role="tab" id="modeEx" aria-selected="true">Exercises</button>
+    <button role="tab" id="modeFree" aria-selected="false">Free code</button>
+  </div>
   <div class="top-actions">
-    <label class="sel"><span>Example</span>
-      <select id="sample"></select>
-    </label>
+    <label class="sel" id="sampleWrap" hidden><span>Example</span><select id="sample"></select></label>
     <button id="restore" class="link" hidden>Restore my code</button>
+    <label class="switch"><input type="checkbox" id="expert"><span>Expert view</span></label>
   </div>
 </header>
 
-<nav class="rail" id="rail" aria-label="Walkthrough order"></nav>
-
-<section class="panel" aria-label="Run controls">
-  <div class="bar">
-    <button id="run" class="run">Run main</button>
-    <div class="ctrls">
-      <button id="bFirst" aria-label="First step"><svg viewBox="0 0 16 16"><path d="M3 2h2v12H3zM14 2v12L6 8z"/></svg></button>
-      <button id="bPrev" aria-label="Previous step"><svg viewBox="0 0 16 16"><path d="M12 2v12L3 8z"/></svg></button>
-      <button id="bPlay" class="primary" aria-label="Play">Play</button>
-      <button id="bNext" aria-label="Next step"><svg viewBox="0 0 16 16"><path d="M4 2v12l9-6z"/></svg></button>
-      <button id="bLast" aria-label="Last step"><svg viewBox="0 0 16 16"><path d="M11 2h2v12h-2zM2 2v12l8-6z"/></svg></button>
-    </div>
-    <div class="scrub"><input type="range" id="scrub" min="0" max="0" value="0" aria-label="Step"><span class="count" id="count">not running</span></div>
-  </div>
-  <div class="narr" id="narr" aria-live="polite"></div>
-</section>
+<nav class="rail" id="rail" aria-label="Exercises, easy to hard"></nav>
 
 <main class="grid">
-  <div class="col">
+  <div class="col left">
+    <section class="panel ex-card" id="exCard"></section>
+
     <section class="panel">
-      <div class="panel-h"><h2>Your code</h2><span class="hint" id="edhint">edits are saved in this browser</span></div>
+      <div class="panel-h"><h2>Your code</h2><span class="hint" id="live"></span></div>
       <div class="panel-b">
         <div class="editor" id="editor">
           <div class="gutter" id="gutter" aria-hidden="true"></div>
@@ -51,21 +40,42 @@
             <textarea id="code" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="C source code"></textarea>
           </div>
         </div>
-        <div class="driver" id="driver" hidden>
-          <div class="driver-h"><span id="driverTitle">Test driver</span><button class="link" id="driverClose">Back to my main</button></div>
-          <pre class="code-ro" id="driverCode"></pre>
-        </div>
+        <p class="ed-tip">Click a line to see memory at that moment. Your code runs as you type.</p>
+        <div id="blocks"></div>
+        <div id="stuck"></div>
       </div>
     </section>
+
     <section class="panel">
       <div class="panel-h"><h2>Output</h2><span class="hint">what printf and write printed</span></div>
       <div class="panel-b"><pre class="out" id="out"></pre></div>
     </section>
   </div>
-  <div class="col">
-    <section class="panel">
-      <div class="panel-h"><h2>Memory</h2><span class="hint">arrows are pointers</span></div>
-      <div class="panel-b">
+
+  <div class="col right">
+    <section class="panel" id="testsPanel">
+      <div class="panel-h"><h2>Tests</h2><span class="hint" id="testsHint"></span></div>
+      <div class="panel-b" id="tests"></div>
+    </section>
+
+    <section class="panel viz">
+      <div class="bar">
+        <div class="ctrls">
+          <button id="bFirst" aria-label="First step"><svg viewBox="0 0 16 16"><path d="M3 2h2v12H3zM14 2v12L6 8z"/></svg></button>
+          <button id="bPrev" aria-label="Previous step"><svg viewBox="0 0 16 16"><path d="M12 2v12L3 8z"/></svg></button>
+          <button id="bPlay" class="primary" aria-label="Play">Play</button>
+          <button id="bNext" aria-label="Next step"><svg viewBox="0 0 16 16"><path d="M4 2v12l9-6z"/></svg></button>
+          <button id="bLast" aria-label="Last step"><svg viewBox="0 0 16 16"><path d="M11 2h2v12h-2zM2 2v12l8-6z"/></svg></button>
+        </div>
+        <div class="scrub"><input type="range" id="scrub" min="0" max="0" value="0" aria-label="Step"><span class="count" id="count">not running</span></div>
+      </div>
+      <div class="narr" id="narr" aria-live="polite"></div>
+      <div class="tabs" role="tablist" aria-label="View">
+        <button role="tab" id="tabMem" aria-selected="true">Memory</button>
+        <button role="tab" id="tabFlow" aria-selected="false">Flow</button>
+        <span class="hint" id="viewHint"></span>
+      </div>
+      <div class="panel-b" id="memView">
         <div class="mem" id="mem"></div>
         <div class="legend">
           <span><i class="lg read"></i>read</span>
@@ -76,22 +86,13 @@
           <span><i class="lg leak"></i>leaked</span>
         </div>
       </div>
-    </section>
-  </div>
-  <div class="col side">
-    <section class="panel">
-      <div class="panel-h"><h2>Logic flow</h2><span class="hint" id="flowhint"></span></div>
-      <div class="panel-b flow" id="flow"></div>
-    </section>
-    <section class="panel">
-      <div class="panel-h"><h2>Path to pass</h2><span class="hint" id="pathhint"></span></div>
-      <div class="panel-b" id="path"></div>
+      <div class="panel-b flow" id="flowView" hidden></div>
     </section>
   </div>
 </main>
 
 <footer class="foot">
-  Runs entirely in your browser with a C interpreter built for libft: integers, pointers, arrays, structs, malloc and free.
+  Runs in your browser with a C interpreter built for libft: integers, pointers, arrays, structs, function pointers, malloc and free.
   No floats, unions, enums or switch yet. Always confirm with <code>cc -Wall -Wextra -Werror</code> and norminette.
 </footer>
 
