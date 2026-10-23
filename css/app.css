@@ -90,7 +90,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .hl, #code { position: absolute; inset: 0; margin: 0; padding: 8px 10px; font-family: var(--font-code); font-size: 13px; line-height: var(--lh); tab-size: 4; white-space: pre; overflow: auto; border: 0; }
 .hl { pointer-events: none; color: var(--ink); overflow: hidden; }
 .hl .l { display: block; min-height: var(--lh); margin: 0 -10px; padding: 0 10px; }
-.hl .l.cur { background: var(--hl-line); }
+.hl .l.cur { background: transparent; }
 .hl .l.prev { background: var(--prev-line); }
 .hl .l.err { background: var(--bad-soft); }
 #code { background: transparent; color: transparent; caret-color: var(--ink); resize: none; outline: none; }
@@ -169,10 +169,12 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .cell.nul .box { background: var(--nul); color: var(--nul-ink); border-color: var(--nul-ink); font-size: 12px; }
 .cell.uninit .box { color: var(--muted); font-weight: 400; background: repeating-linear-gradient(135deg, var(--panel) 0 5px, var(--soft) 5px 10px); }
 .cell.read .box { border-color: var(--read); background: var(--read-soft); }
-.cell.write .box { border-color: var(--write); background: var(--write-soft); animation: pop .35s ease-out; }
+.cell.write .box { border-color: var(--write); background: var(--write-soft); }
+.mem.anim .cell.write .box { animation: pop .35s ease-out; }
 .cell.ghost .box { border-style: dashed; border-color: var(--bad); background: transparent; color: var(--bad); }
 .cell.ghost .idx { color: var(--bad); }
-.cell.bad .box { background: var(--bad-soft); border-color: var(--bad); border-style: solid; animation: shake .4s ease-out; }
+.cell.bad .box { background: var(--bad-soft); border-color: var(--bad); border-style: solid; }
+.mem.anim .cell.bad .box { animation: shake .4s ease-out; }
 .cell.pastend .box { border-style: dotted; background: transparent; color: var(--muted); font-weight: 400; font-size: 10px; }
 .scell { border: 1.5px solid var(--line); border-radius: 6px; background: var(--panel); min-width: 150px; }
 .scell.write { border-color: var(--write); }
@@ -293,3 +295,19 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .viz .narr { border-top: 1px solid var(--line); }
 /* show != and <= as typed, never as ligatures */
 code, .mono, .hl, #code, .gutter, .proto, .code-ro, .out, .step pre, .flow, .mem { font-variant-ligatures: none; font-feature-settings: "liga" 0, "calt" 0; }
+
+/* ---------- step animations ---------- */
+.curbar { position: absolute; left: 0; right: 0; top: 8px; height: var(--lh); background: var(--hl-line); pointer-events: none;
+  transform: translateY(calc(var(--line, 0) * var(--lh) - var(--st, 0px))); }
+.curbar.glide { transition: transform .3s cubic-bezier(.2, .7, .2, 1); }
+.hl { z-index: 1; } #code { z-index: 2; }
+.frames, .blocks, .block { position: relative; }
+.ghost-frame { position: absolute; pointer-events: none; z-index: 3; }
+.ghost-frame .frame { margin: 0; }
+.fly { position: absolute; z-index: 4; pointer-events: none; display: grid; place-items: center; border: 1.5px solid var(--write); border-radius: 5px;
+  background: var(--write-soft); color: var(--ink); font-family: var(--font-code); font-weight: 600; font-size: 14px; box-shadow: 0 4px 12px rgb(0 0 0 / .18); }
+.vv { transform-origin: 50% 50%; }
+.block.pulse { animation: leakpulse 1.2s ease-in-out 2; border-radius: 8px; }
+@keyframes leakpulse { 50% { box-shadow: 0 0 0 4px var(--bad-soft); } }
+.flow .focus { fill: none; stroke: var(--accent); stroke-width: 2; stroke-dasharray: 4 3; opacity: .8; }
+@media (prefers-reduced-motion: reduce) { .curbar.glide { transition: none; } }

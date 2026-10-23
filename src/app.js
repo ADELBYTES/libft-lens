@@ -34,6 +34,7 @@ const S = {
   selTest: {},
   testRes: {},
   expert: store.get("expert", false),
+  animOn: store.get("anim", true),
   tab: "mem",
   cursorLine: 1,
   prevArrows: {},
@@ -181,7 +182,7 @@ function lineMarks() {
   return marks;
 }
 
-function renderEditor() {
+function renderEditor(anim = false) {
   const lines = S.code.split("\n");
   const marks = lineMarks().main;
   hl.innerHTML = lines.map((l, k) => `<span class="l${marks[k + 1] ? " " + marks[k + 1] : ""}">${syntax(l) || " "}</span>`).join("");
@@ -189,10 +190,23 @@ function renderEditor() {
     const m = marks[k + 1];
     return `<div class="${m || ""}"><span class="mk">${m === "cur" ? "▶" : m === "err" ? "✕" : ""}</span>${k + 1}</div>`;
   }).join("");
+  // the current-line bar glides to the next line instead of jumping
+  const cur = Object.keys(marks).find((k) => marks[k] === "cur");
+  const bar = $("curbar");
+  bar.hidden = !cur;
+  if (cur) {
+    bar.classList.toggle("glide", anim);
+    bar.style.setProperty("--line", cur - 1);
+    clearTimeout(bar.glideTimer);
+    if (anim) bar.glideTimer = setTimeout(() => bar.classList.remove("glide"), dur() + 50);
+  }
   syncScroll();
 }
 
-function syncScroll() { hl.scrollTop = ta.scrollTop; hl.scrollLeft = ta.scrollLeft; gutter.scrollTop = ta.scrollTop; }
+function syncScroll() {
+  hl.scrollTop = ta.scrollTop; hl.scrollLeft = ta.scrollLeft; gutter.scrollTop = ta.scrollTop;
+  $("curbar").style.setProperty("--st", ta.scrollTop + "px");
+}
 
 function scrollToLine(line) {
   const lh = parseFloat(getComputedStyle(ta).lineHeight) || 21;
@@ -306,7 +320,7 @@ function linkedFrom(name) {
 
 /* ---------------- memory ---------------- */
 
-function renderMemory() {
+function renderMemory(anim = false) {
   const s = snap();
   const mem = $("mem");
   if (!s) {
@@ -367,7 +381,7 @@ function renderMemory() {
     else val = v.init ? esc(v.kind === "char" && S.expert ? `${v.num} '${v.text}'` : v.text) : '<span class="unk">?</span>';
     const changed = blockId != null && writtenBlocks.has(blockId);
     const nullCls = v.kind === "ptr" && v.target && v.target.null ? " null" : "";
-    let h = `<div class="var${sub ? " sub" : ""}"><span class="vn">${esc(v.name)}</span><span class="vt" title="${esc(v.type || "")}">${esc(v.type || "")}</span><span class="vv${changed ? " changed" : ""}${nullCls}" ${blockId != null ? `data-varblock="${blockId}"` : ""}>${val}</span></div>`;
+    let h = `<div class="var${sub ? " sub" : ""}"><span class="vn">${esc(v.name)}</span><span class="vt" title="${esc(v.type || "")}">${esc(v.type || "")}</span><span class="vv${changed ? " changed" : ""}${nullCls}" data-vkey="${esc(key)}" ${blockId != null ? `data-varblock="${blockId}"` : ""}>${val}</span></div>`;
     if (v.kind === "struct") h += v.fields.map((f) => varRow({ ...f }, `${key}.${f.name}`, true)).join("");
     return h;
   };
@@ -377,7 +391,7 @@ function renderMemory() {
     const top = fi === s.frames.length - 1;
     const linked = S.trace.program.items.some((it) => it.k === "func" && it.name === f.name && it.file === "lib");
     const state = top ? (s.kind === "error" ? "crashed here" : "running") : "waiting";
-    h += `<div class="frame${top && s.frames.length > 1 ? " top-f" : ""}"><div class="frame-h">${esc(f.name)}()<span>${linked ? "linked · " : ""}${state}</span></div>`;
+    h += `<div class="frame${top && s.frames.length > 1 ? " top-f" : ""}" data-key="f${f.id}"><div class="frame-h">${esc(f.name)}()<span>${linked ? "linked · " : ""}${state}</span></div>`;
     h += f.vars.length ? f.vars.map((v) => varRow(v, `${f.id}.${v.name}`, false, v.block)).join("") : '<div class="none">no variables yet</div>';
     h += "</div>";
   });
@@ -419,23 +433,134 @@ function renderMemory() {
     }
     if (b.more) cells += `<span class="more">+${b.more} more</span>`;
     if (pastEndTargets && !ghost.has(b.id)) cells += `<div class="cell pastend" data-cell="${b.id}:${b.count}"><span class="tag">${esc((cellMarks.get(b.id + ":" + b.count) || { tags: [] }).tags.join(" "))}</span><span class="box">end</span><span class="idx">${b.count}</span></div>`;
-    blockHtml.push(`<div class="block${b.alive ? "" : " freed"}${b.lost ? " lost" : ""}"><div class="block-h"><b>${esc(b.name || "block")}</b>${region}<span>${detail}</span></div><div class="cells-wrap"><div class="cells">${cells}</div></div></div>`);
+    blockHtml.push(`<div class="block${b.alive ? "" : " freed"}${b.lost ? " lost" : ""}${b.lost && s.kind === "end" ? " pulse" : ""}" data-key="b${b.id}" data-heap="${b.kind === "heap"}"><div class="block-h"><b>${esc(b.name || "block")}</b>${region}<span>${detail}</span></div><div class="cells-wrap"><div class="cells">${cells}</div></div></div>`);
   }
   if (blockHtml.length) h += `<div class="sec">Arrays, strings and heap</div><div class="blocks">${blockHtml.join("")}</div>`;
   h += '<svg class="arrows" id="arrows" aria-hidden="true"></svg>';
+  // measure the old layout before replacing it, so things can move from where they were
+  const before = anim ? measure(mem) : null;
   mem.innerHTML = h;
+  mem.classList.toggle("anim", !!anim);
   S.arrowList = arrows;
   S.arrowBlocks = blocks;
-  requestAnimationFrame(() => drawArrows(true));
+  requestAnimationFrame(() => {
+    drawArrows(anim, before);
+    if (before) animateMemory(mem, before, s);
+  });
 }
 
-function drawArrows(animate) {
+/* ---------------- animation (FLIP: measure, re-render, play the difference) ---------------- */
+
+const dur = () => (S.timer ? 380 : 320);
+const EASE = "cubic-bezier(.2, .7, .2, 1)";
+
+function measure(mem) {
+  const base = mem.getBoundingClientRect();
+  const rel = (r) => ({ x: r.left - base.left, y: r.top - base.top, w: r.width, h: r.height });
+  const rects = new Map(), html = new Map(), freed = new Set(), vals = new Map(), cells = new Map();
+  for (const el of mem.querySelectorAll("[data-key]")) {
+    rects.set(el.dataset.key, rel(el.getBoundingClientRect()));
+    if (el.dataset.key[0] === "f") html.set(el.dataset.key, el.outerHTML);
+    if (el.classList.contains("freed")) freed.add(el.dataset.key);
+  }
+  for (const el of mem.querySelectorAll("[data-vkey]")) vals.set(el.dataset.vkey, el.textContent);
+  for (const el of mem.querySelectorAll("[data-cell]")) cells.set(el.dataset.cell, el.textContent);
+  return { rects, html, freed, vals, cells, geom: S.arrowGeom || {} };
+}
+
+function animateMemory(mem, before, s) {
+  const base = mem.getBoundingClientRect();
+  const D = dur();
+  const now = new Set();
+  for (const el of mem.querySelectorAll("[data-key]")) {
+    const key = el.dataset.key;
+    now.add(key);
+    const r = el.getBoundingClientRect();
+    const old = before.rects.get(key);
+    if (old) {
+      // frames and blocks that shifted glide to their new place
+      const dx = old.x - (r.left - base.left), dy = old.y - (r.top - base.top);
+      if (Math.abs(dx) + Math.abs(dy) > 1) el.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: "none" }], { duration: D, easing: EASE });
+      if (key[0] === "b" && el.classList.contains("freed") && !before.freed.has(key)) crumble(el, D);
+    } else if (key[0] === "f") {
+      el.animate([{ opacity: 0, transform: "translateY(-14px) scale(.96)" }, { opacity: 1, transform: "none" }], { duration: D, easing: EASE });
+    } else if (key[0] === "b" && el.dataset.heap === "true") {
+      // a new malloc block grows in cell by cell
+      el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: D / 2 });
+      el.querySelectorAll(".cell, .scell").forEach((c, k) => c.animate([{ opacity: 0, transform: "scale(.5)" }, { opacity: 1, transform: "none" }], { duration: D, delay: Math.min(k, 16) * 30, easing: EASE, fill: "backwards" }));
+    }
+  }
+  // returned functions: their frame slides away from where it was
+  for (const [key, html] of before.html) {
+    if (now.has(key)) continue;
+    const old = before.rects.get(key);
+    const ghost = document.createElement("div");
+    ghost.className = "ghost-frame";
+    ghost.innerHTML = html;
+    // the ghost is only a picture: keep it out of the next measurement and arrow lookup
+    ghost.querySelectorAll("[data-key], [data-vkey], [data-src], [data-varblock]").forEach((n) => { delete n.dataset.key; delete n.dataset.vkey; delete n.dataset.src; delete n.dataset.varblock; });
+    Object.assign(ghost.style, { left: old.x + "px", top: old.y + "px", width: old.w + "px" });
+    mem.appendChild(ghost);
+    ghost.animate([{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(-14px) scale(.96)" }], { duration: D, easing: EASE }).onfinish = () => ghost.remove();
+  }
+  // values that changed flip to the new one
+  for (const el of mem.querySelectorAll("[data-vkey]")) {
+    const old = before.vals.get(el.dataset.vkey);
+    if (old != null && old !== el.textContent) el.animate([{ transform: "rotateX(90deg)", opacity: 0.2 }, { transform: "none", opacity: 1 }], { duration: D, easing: EASE });
+  }
+  flyCopies(mem, s, D);
+}
+
+function crumble(el, D) {
+  el.animate([{ opacity: 1, transform: "none" }, { opacity: 0.55, transform: "scale(.97)" }], { duration: D * 1.4, easing: EASE });
+  el.querySelectorAll(".box").forEach((b, k) => b.animate([{ transform: "none" }, { transform: "translateY(3px) rotate(4deg)" }, { transform: "none" }], { duration: D, delay: Math.min(k, 12) * 25 }));
+}
+
+// d[i] = s[i]: a copy of the byte travels from the cell it was read from to the one written
+function flyCopies(mem, s, D) {
+  const shown = new Set(s.blocks.map((b) => b.id));
+  const byId = new Map(s.blocks.map((b) => [b.id, b]));
+  const cellOf = (ev) => { const b = byId.get(ev.block); return b && mem.querySelector(`[data-cell="${b.id}:${Math.floor((ev.addr - b.addr) / b.elemSize)}"] .box`); };
+  const base = mem.getBoundingClientRect();
+  let lastRead = null, flown = 0;
+  for (const ev of s.events) {
+    if (ev.k === "r" && shown.has(ev.block) && ev.size <= 8) lastRead = ev;
+    if (ev.k !== "w" || !lastRead || !shown.has(ev.block) || ev.text !== lastRead.text || ev.addr === lastRead.addr || flown >= 3) continue;
+    const from = cellOf(lastRead), to = cellOf(ev);
+    lastRead = null;
+    if (!from || !to) continue;
+    const a = from.getBoundingClientRect(), b = to.getBoundingClientRect();
+    const fly = document.createElement("div");
+    fly.className = "fly";
+    fly.textContent = to.textContent;
+    Object.assign(fly.style, { left: a.left - base.left + "px", top: a.top - base.top + "px", width: a.width + "px", height: a.height + "px" });
+    mem.appendChild(fly);
+    const dx = b.left - a.left, dy = b.top - a.top;
+    fly.animate([
+      { transform: "none", opacity: 0.95 },
+      { transform: `translate(${dx / 2}px, ${dy / 2 - 26}px) scale(1.1)`, opacity: 1, offset: 0.5 },
+      { transform: `translate(${dx}px, ${dy}px)`, opacity: 0.3 },
+    ], { duration: D * 1.5, easing: "ease-in-out" }).onfinish = () => fly.remove();
+    flown++;
+  }
+}
+
+function arrowPath(sx, sy, ex, ey, side) {
+  if (!side) {
+    const bend = Math.max(24, (ey - sy) * 0.45);
+    return `M ${sx} ${sy} C ${sx} ${sy + bend}, ${ex} ${ey - bend}, ${ex} ${ey}`;
+  }
+  const out = Math.max(sx, ex) + 26;
+  return `M ${sx} ${sy} C ${out} ${sy}, ${out} ${ey}, ${ex} ${ey}`;
+}
+
+function drawArrows(animate, before) {
   const mem = $("mem"), svg = $("arrows");
   if (!svg || !S.arrowList || S.tab !== "mem") return;
   const base = mem.getBoundingClientRect();
   const defs = "<defs>" + PTR.map((c, i) => `<marker id="am${i}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" style="fill:${c}"/></marker>`).join("") + "</defs>";
   let paths = "";
-  const now = {};
+  const geom = {}, morphs = [];
   for (const a of S.arrowList) {
     const from = mem.querySelector(`[data-src="${CSS.escape(a.key)}"]`);
     if (!from) continue;
@@ -446,25 +571,39 @@ function drawArrows(animate) {
     if (!to) continue;
     const r1 = from.getBoundingClientRect(), r2 = to.getBoundingClientRect();
     const sx = r1.left + r1.width / 2 - base.left, sy = r1.top + r1.height / 2 - base.top;
-    let ex, ey, d;
-    if (r2.top > r1.bottom + 8) {
-      ex = r2.left + Math.min(r2.width / 2, 20) - base.left; ey = r2.top - base.top - 2;
-      const bend = Math.max(24, (ey - sy) * 0.45);
-      d = `M ${sx} ${sy} C ${sx} ${sy + bend}, ${ex} ${ey - bend}, ${ex} ${ey}`;
-    } else {
-      // target is beside or above: come in from its right edge
-      ex = r2.right - base.left + 2; ey = r2.top + r2.height / 2 - base.top;
-      const out = Math.max(r1.right, r2.right) - base.left + 26;
-      d = `M ${sx} ${sy} C ${out} ${sy}, ${out} ${ey}, ${ex} ${ey}`;
-    }
-    const tkey = a.target.block + ":" + a.target.off;
-    const fresh = animate && S.prevArrows[a.key] !== tkey && !reduceMotion();
-    now[a.key] = tkey;
-    paths += `<path class="${fresh ? "draw" : ""}${a.dangling ? " dang" : ""}" d="${d}" style="stroke:${a.dangling ? "var(--bad)" : a.color}" marker-end="url(#am${PTR.indexOf(a.color)})"/>`;
+    // below the source: drop in from above; beside or above: come in from the right edge
+    const side = !(r2.top > r1.bottom + 8);
+    const ex = side ? r2.right - base.left + 2 : r2.left + Math.min(r2.width / 2, 20) - base.left;
+    const ey = side ? r2.top + r2.height / 2 - base.top : r2.top - base.top - 2;
+    const g = { sx, sy, ex, ey, side };
+    geom[a.key] = g;
+    const old = animate && before && before.geom[a.key];
+    const moved = old && (Math.abs(old.ex - ex) + Math.abs(old.ey - ey) + Math.abs(old.sx - sx) + Math.abs(old.sy - sy) > 1);
+    const fresh = animate && !old && !reduceMotion();
+    if (moved) morphs.push({ key: a.key, from: old, to: g });
+    const d = moved ? arrowPath(old.sx, old.sy, old.ex, old.ey, side) : arrowPath(sx, sy, ex, ey, side);
+    paths += `<path data-akey="${esc(a.key)}" class="${fresh ? "draw" : ""}${a.dangling ? " dang" : ""}" d="${d}" style="stroke:${a.dangling ? "var(--bad)" : a.color}" marker-end="url(#am${PTR.indexOf(a.color)})"/>`;
   }
   svg.innerHTML = defs + paths;
   svg.querySelectorAll("path.draw").forEach((p) => { const L = p.getTotalLength(); p.style.setProperty("--len", L); p.style.strokeDasharray = L; });
-  if (animate) S.prevArrows = now;
+  S.arrowGeom = geom;
+  if (morphs.length) morphArrows(svg, morphs);
+}
+
+// a pointer that moved slides its arrow head to the new target
+function morphArrows(svg, morphs) {
+  const D = dur(), t0 = performance.now();
+  const els = morphs.map((m) => svg.querySelector(`[data-akey="${CSS.escape(m.key)}"]`));
+  const ease = (t) => 1 - Math.pow(1 - t, 3);
+  const lerp = (a, b, t) => a + (b - a) * t;
+  (function frame(now) {
+    const t = Math.min(1, (now - t0) / D), e = ease(t);
+    morphs.forEach((m, k) => {
+      if (!els[k] || !els[k].isConnected) return;
+      els[k].setAttribute("d", arrowPath(lerp(m.from.sx, m.to.sx, e), lerp(m.from.sy, m.to.sy, e), lerp(m.from.ex, m.to.ex, e), lerp(m.from.ey, m.to.ey, e), m.to.side));
+    });
+    if (t < 1) requestAnimationFrame(frame);
+  })(t0);
 }
 if (window.ResizeObserver) new ResizeObserver(() => drawArrows(false)).observe($("mem"));
 
@@ -473,7 +612,7 @@ if (window.ResizeObserver) new ResizeObserver(() => drawArrows(false)).observe($
 const flowCache = new WeakMap();
 const flowOf = (f) => { if (!flowCache.has(f)) flowCache.set(f, buildFlow(f)); return flowCache.get(f); };
 
-function renderFlow() {
+function renderFlow(anim = false) {
   const el = $("flowView");
   if (S.tab !== "flow") return;
   const s = snap();
@@ -532,10 +671,18 @@ function renderFlow() {
     const text = n.label.length > max ? n.label.slice(0, max - 1) + "…" : n.label;
     svg += `<g class="${cls}"><title>${esc(n.label)} (line ${n.line})</title><rect x="${X(n)}" y="${Y(n)}" width="${w}" height="${NH}" rx="${n.kind === "cond" ? NH / 2 : 4}"/><text x="${X(n) + 8}" y="${Y(n) + NH / 2 + 4}">${esc(text)}</text>${counts[n.id] ? `<text class="cnt" x="${X(n) + w + 4}" y="${Y(n) + 10}">×${counts[n.id]}</text>` : ""}</g>`;
   }
-  if (tokenPath && !reduceMotion()) svg += `<circle class="token" r="4.5"><animateMotion dur="0.45s" begin="indefinite" fill="freeze" path="${tokenPath}"/></circle>`;
+  // a focus ring sweeps from the previous line's node to this one
+  const act = !live && nodes.find((n) => n.id === s.node);
+  if (act) {
+    const f = { fn: fnItem.name, x: X(act) - 3, y: Y(act) - 3, w: NW(act) + 6 };
+    const p = anim && S.flowFocus && S.flowFocus.fn === f.fn ? S.flowFocus : null;
+    const a = (attr, from, to) => `<animate attributeName="${attr}" from="${from}" to="${to}" dur="${dur()}ms" begin="indefinite" fill="freeze" calcMode="spline" keySplines=".2 .7 .2 1" keyTimes="0;1"/>`;
+    svg += `<rect class="focus" x="${f.x}" y="${f.y}" width="${f.w}" height="${NH + 6}" rx="7">${p ? a("x", p.x, f.x) + a("y", p.y, f.y) + a("width", p.w, f.w) : ""}</rect>`;
+    S.flowFocus = f;
+  }
+  if (tokenPath && anim) svg += `<circle class="token" r="4.5"><animateMotion dur="${dur()}ms" begin="indefinite" fill="freeze" path="${tokenPath}"/></circle>`;
   el.innerHTML = svg + "</svg>";
-  const am = el.querySelector("animateMotion");
-  if (am && am.beginElement) try { am.beginElement(); } catch { /* SMIL unsupported */ }
+  for (const am of el.querySelectorAll("animate, animateMotion")) if (am.beginElement) try { am.beginElement(); } catch { /* SMIL unsupported */ }
 }
 
 /* ---------------- exercise card, steps, hints ---------------- */
@@ -651,8 +798,8 @@ function renderControls() {
 
 function renderOut() { const s = snap(); $("out").textContent = s ? s.stdout : ""; }
 
-function renderStep(scroll = true) {
-  renderControls(); renderEditor(); renderNarr(); renderMemory(); renderFlow(); renderOut();
+function renderStep(scroll = true, anim = false) {
+  renderControls(); renderEditor(anim); renderNarr(); renderMemory(anim); renderFlow(anim); renderOut();
   const s = snap();
   $("viewHint").textContent = s && s.file === "test" ? `test driver, line ${testLine(S.trace.a, s.line)}` : "";
   if (scroll && s && s.file === "main" && s.line && document.activeElement !== ta) scrollToLine(s.line);
@@ -667,11 +814,13 @@ function renderAll() {
   renderRail(); renderExCard(); renderBlocks(); renderStuck(); renderTests(); renderStep(false);
 }
 
+// animate only a single step forward: jumps, scrubbing and stepping back stay instant
 function go(p) {
   if (!S.trace) return;
   const n = S.trace.result.steps.length;
+  const anim = S.animOn && !reduceMotion() && S.pos >= 0 && p === S.pos + 1 && p < n;
   S.pos = Math.max(0, Math.min(n - 1, p));
-  renderStep();
+  renderStep(true, anim);
   if (S.pos === n - 1) stop();
 }
 function stop() { clearInterval(S.timer); S.timer = null; $("bPlay").textContent = "Play"; $("bPlay").setAttribute("aria-label", "Play"); }
@@ -711,6 +860,8 @@ function openFree() {
 
 $("modeEx").onclick = () => openExercise(S.exId);
 $("modeFree").onclick = openFree;
+$("anim").checked = S.animOn;
+$("anim").onchange = (e) => { S.animOn = e.target.checked; store.set("anim", S.animOn); };
 $("expert").checked = S.expert;
 $("expert").onchange = (e) => { S.expert = e.target.checked; store.set("expert", S.expert); renderStep(false); };
 $("tabMem").onclick = () => { S.tab = "mem"; $("tabMem").setAttribute("aria-selected", true); $("tabFlow").setAttribute("aria-selected", false); $("memView").hidden = false; $("flowView").hidden = true; renderMemory(); };

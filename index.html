@@ -20,6 +20,7 @@
   <div class="top-actions">
     <label class="sel" id="sampleWrap" hidden><span>Example</span><select id="sample"></select></label>
     <button id="restore" class="link" hidden>Restore my code</button>
+    <label class="switch"><input type="checkbox" id="anim"><span>Animations</span></label>
     <label class="switch"><input type="checkbox" id="expert"><span>Expert view</span></label>
   </div>
 </header>
@@ -36,6 +37,7 @@
         <div class="editor" id="editor">
           <div class="gutter" id="gutter" aria-hidden="true"></div>
           <div class="ed-main">
+            <div class="curbar" id="curbar" hidden></div>
             <pre class="hl" id="hl" aria-hidden="true"></pre>
             <textarea id="code" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="C source code"></textarea>
           </div>
