@@ -24,9 +24,12 @@ const HEAP_LIMIT = 0x300000;
 const STACK_TOP = MEM_SIZE - 0x10;
 const REDZONE = 16;
 const MAX_MALLOC = 1 << 20;
+const MAX_ALLOCS = 20000;
+const MAX_OUTPUT = 64 * 1024;
 
 export const hex = (n) => "0x" + n.toString(16);
 
+const CMP = new Set(["<", ">", "<=", ">=", "==", "!="]);
 const wrap = (v, t) => (t.signed ? BigInt.asIntN(t.size * 8, v) : BigInt.asUintN(t.size * 8, v));
 
 /* ---------------- expression printer (labels for memory events) ---------------- */
@@ -77,6 +80,7 @@ class Memory {
     this.rodataTop = RODATA_BASE;
     this.globalTop = GLOBAL_BASE;
     this.sp = STACK_TOP;
+    this.heapCount = 0;
     this.rec = rec; // event sink
   }
 
@@ -84,6 +88,7 @@ class Memory {
     let addr;
     const align = 16;
     if (kind === "heap") {
+      if (++this.heapCount > MAX_ALLOCS) throw new CRuntimeError(`More than ${MAX_ALLOCS.toLocaleString("en")} allocations: the visualiser stops here. Free blocks you no longer need, or allocate fewer, bigger ones.`, "limit");
       addr = Math.ceil((this.heapTop + REDZONE) / align) * align;
       if (addr + size + REDZONE > HEAP_LIMIT) return null;
       this.heapTop = addr + size;
@@ -105,9 +110,11 @@ class Memory {
 
   // newest first, so a live stack variable wins over a dead one at the same spot
   find(addr) {
+    const l = this.last;
+    if (l && l.alive && addr >= l.addr && addr < l.addr + l.size) return l;
     for (let k = this.blocks.length - 1; k >= 0; k--) {
       const b = this.blocks[k];
-      if (addr >= b.addr && addr < b.addr + b.size) return b;
+      if (addr >= b.addr && addr < b.addr + b.size) { if (b.alive) this.last = b; return b; }
     }
     return null;
   }
@@ -223,13 +230,13 @@ function makeBuiltins(I) {
   const lib = {
     malloc: B(P.v, [P.sz], ([n]) => {
       const size = Number(BigInt.asUintN(64, n.v));
-      if (size > MAX_MALLOC) return { t: P.v, v: 0 };
+      if (size > MAX_MALLOC || I.failNow()) return { t: P.v, v: 0 };
       const b = m.alloc("heap", size, { line: I.line, how: `malloc(${size})` });
       return { t: P.v, v: b ? b.addr : 0 };
     }),
     calloc: B(P.v, [P.sz, P.sz], ([n, s]) => {
       const size = Number(BigInt.asUintN(64, n.v * s.v));
-      if (n.v * s.v > BigInt(MAX_MALLOC)) return { t: P.v, v: 0 };
+      if (n.v * s.v > BigInt(MAX_MALLOC) || I.failNow()) return { t: P.v, v: 0 };
       const b = m.alloc("heap", size, { line: I.line, how: `calloc(${n.v}, ${s.v})` });
       if (b) { m.bytes.fill(0, b.addr, b.addr + size); m.init.fill(1, b.addr, b.addr + size); }
       return { t: P.v, v: b ? b.addr : 0 };
@@ -321,10 +328,12 @@ function makeBuiltins(I) {
       I.expect(ok, `${I.cs(what.v)}: expected bytes "${show(y)}", got "${show(x)}"`);
       return intv(ok ? 1 : 0);
     }),
+    // the n-th allocation from now returns NULL (1 = the very next one)
+    __fail_malloc_after: B(T.void, [T.int], ([n]) => { I.failAfter = Number(n.v); return { t: T.void }; }),
     __expect_out: B(T.int, [P.cc, P.cc], ([exp, what]) => {
       const e = I.cs(exp.v), ok = I.stdout === e;
       I.expect(ok, `${I.cs(what.v)}: expected output ${JSON.stringify(e)}, got ${JSON.stringify(I.stdout)}`);
-      I.outBytes = []; I.stdout = "";
+      I.outLen = 0; I.stdout = "";
       return intv(ok ? 1 : 0);
     }),
     __expect_ptr: B(T.int, [P.v, P.v, P.cc], ([a, b, what]) => {
@@ -371,9 +380,10 @@ class Interp {
     this.frameId = 1;
     this.snaps = [];
     this.stdout = "";
-    this.outBytes = [];
+    this.outLen = 0;
     this.expects = [];
     this.warnings = [];
+    this.warned = new Set();
     this.steps = 0;
     this.line = 0;
     this.file = "main";
@@ -398,9 +408,16 @@ class Interp {
 
   record(ev) { if (this.opts.trace) this.events.push(ev); }
   out(bytes) {
-    this.outBytes.push(...bytes);
-    this.stdout = new TextDecoder().decode(new Uint8Array(this.outBytes));
-    this.record({ k: "out", text: new TextDecoder().decode(new Uint8Array(bytes)) });
+    const text = new TextDecoder().decode(new Uint8Array(bytes));
+    this.outLen += bytes.length;
+    this.stdout += text;
+    if (this.outLen > MAX_OUTPUT) throw new CRuntimeError(`The program printed more than ${MAX_OUTPUT / 1024} KB, so it was stopped. Is a print inside a loop that never ends?`, "limit");
+    this.record({ k: "out", text });
+  }
+  failNow() {
+    if (!(this.failAfter > 0) || --this.failAfter > 0) return false;
+    this.record({ k: "note", msg: "malloc returned NULL here: the test simulates running out of memory." });
+    return true;
   }
   expect(ok, msg) { this.expects.push({ ok, msg, line: this.line }); this.record({ k: "expect", ok, msg }); }
   cs(addr) { // read a C string for messages without bounds errors
@@ -593,7 +610,13 @@ class Interp {
     return ret;
   }
 
-  warn(msg) { this.warnings.push({ msg, line: this.line }); this.record({ k: "warn", msg }); }
+  warn(msg, cc = false) {
+    const key = msg + "@" + this.line + this.file;
+    if (this.warned.has(key)) return;
+    this.warned.add(key);
+    this.warnings.push({ msg, line: this.line, file: this.file, cc });
+    this.record({ k: "warn", msg, cc });
+  }
 
   call(e) {
     let name = null, target;
@@ -927,6 +950,10 @@ class Interp {
       return { t, v: wrap(op === "<<" ? x << BigInt(sh) : x >> BigInt(sh), t) };
     }
     const t = commonType(a.t, b.t);
+    if (CMP.has(op) && !t.signed && promote(a.t).signed !== promote(b.t).signed && e.l && e.r && e.l.k !== "num" && e.r.k !== "num") {
+      const [sg, us] = promote(a.t).signed ? [a.t, b.t] : [b.t, a.t];
+      this.warn(`${exprStr(e)} compares a signed ${typeName(sg)} with an unsigned ${typeName(us)}. cc -Wall -Wextra -Werror refuses to compile this (-Wsign-compare).`, true);
+    }
     const x = wrap(a.v, t), y = wrap(b.v, t);
     switch (op) {
       case "+": return this.overflowCheck({ t, v: wrap(x + y, t) }, x + y, e);

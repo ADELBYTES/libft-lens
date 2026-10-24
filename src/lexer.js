@@ -120,7 +120,8 @@ function rawTokens(src, macros) {
       else { v = src.charCodeAt(i) & 255; i++; }
       if (src[i] !== "'") throw new CSyntaxError("character literal needs a closing '", line, startCol);
       i++;
-      toks.push({ t: "char", v: BigInt(v), line, col: startCol, pos: start, end: i });
+      // char is signed on the 42 machines, so '\x80' is -128 like with cc
+      toks.push({ t: "char", v: BigInt(v > 127 ? v - 256 : v), line, col: startCol, pos: start, end: i });
       continue;
     }
     if (c === '"') {

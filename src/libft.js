@@ -216,3 +216,18 @@ TESTS.ft_calloc.push(
   T("zero size gives a freeable pointer", `void\t*p;\n\np = ft_calloc(0, 4);\n__expect_bool(p != 0, 1, "ft_calloc(0, 4) is not NULL");\nfree(p);`),
   T("refuses an overflowing size", `__expect_ptr(ft_calloc(SIZE_MAX, 2), 0, "ft_calloc(SIZE_MAX, 2)");`),
 );
+
+// "NULL if the allocation fails", and no leaks on the way out: the n-th malloc
+// from the call returns NULL, and the leak check catches anything not freed
+const failing = (fn, call, n = 1, pre = "") => T(`returns NULL when malloc fails`, `__fail_malloc_after(${n});\n__expect_ptr(${call}, 0, "${call.replace(/"/g, '\\"')} with malloc failing");`, pre);
+TESTS.ft_calloc.push(failing("ft_calloc", "ft_calloc(4, 4)"));
+TESTS.ft_strdup.push(failing("ft_strdup", 'ft_strdup("abc")'));
+TESTS.ft_substr.push(failing("ft_substr", 'ft_substr("hello", 1, 3)'));
+TESTS.ft_strjoin.push(failing("ft_strjoin", 'ft_strjoin("ab", "cd")'));
+TESTS.ft_strtrim.push(failing("ft_strtrim", 'ft_strtrim("xxhixx", "x")'));
+TESTS.ft_itoa.push(failing("ft_itoa", "ft_itoa(42)"));
+TESTS.ft_strmapi.push(failing("ft_strmapi", 'ft_strmapi("abc", same)', 1, "static char\tsame(unsigned int i, char c)\n{\n\t(void)i;\n\treturn (c);\n}"));
+TESTS.ft_lstnew.push(failing("ft_lstnew", 'ft_lstnew("x")'));
+TESTS.ft_split.push(T("frees everything when a malloc fails", `__fail_malloc_after(3);\n__expect_ptr(ft_split("ab cd ef", ' '), 0, "ft_split when its 3rd malloc fails");`));
+TESTS.ft_lstmap.push(T("cleans up when a node cannot be made", `t_list\ta;\nt_list\tb;\n\na.content = "ab";\na.next = &b;\nb.content = "cd";\nb.next = 0;\n__fail_malloc_after(2);\n__expect_ptr(ft_lstmap(&a, dup_upper, free_content), 0, "ft_lstmap when the 2nd node fails");`,
+  "static void\t*dup_upper(void *p)\n{\n\tchar\t*s;\n\n\ts = strdup(p);\n\ts[0] = s[0] - 32;\n\treturn (s);\n}\n\nstatic void\tfree_content(void *p)\n{\n\tfree(p);\n}"));

@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<title>libft Lens Docs</title>
+<meta name="description" content="How to use libft Lens, what it checks, its limits, and the roadmap.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="css/app.css">
+<link rel="stylesheet" href="css/docs.css">
+</head>
+<body class="docs">
+<header class="top">
+  <a class="brand" href="index.html">libft Lens</a>
+  <nav class="toplinks" aria-label="Pages">
+    <a href="index.html">Open the app</a>
+    <a href="#roadmap">Roadmap</a>
+  </nav>
+</header>
+
+<div class="doc-layout">
+  <nav class="toc" aria-label="On this page">
+    <a href="#start">Quick start</a>
+    <a href="#screen">The screen</a>
+    <a href="#memory">Reading memory</a>
+    <a href="#stuck">Getting unstuck</a>
+    <a href="#checks">What is checked</a>
+    <a href="#bugs">Bugs it catches</a>
+    <a href="#limits">Supported C and limits</a>
+    <a href="#privacy">Privacy and your data</a>
+    <a href="#keys">Shortcuts</a>
+    <a href="#faq">FAQ</a>
+    <a href="#roadmap">Roadmap</a>
+  </nav>
+
+  <main class="doc">
+    <h1>Learn C by watching it run</h1>
+    <p class="lede">libft Lens is a practice space for the 42 libft project. You write each function yourself; the app runs it as you type and shows what it does to memory, line by line. When you are stuck it gives you the next idea, not the answer.</p>
+
+    <section id="start">
+      <h2>Quick start</h2>
+      <ol>
+        <li>Pick a function on the rail at the top. They go from easy (<code>ft_isalpha</code>) to hard (<code>ft_lstmap</code>).</li>
+        <li>Read the goal and the prototype, then replace the <code>/* ▢ 1: … */</code> placeholders with your own code. Each placeholder is one step of the plan.</li>
+        <li>Stop typing for half a second: your code runs against the selected test. Press <b>Next</b> or <b>Play</b> to watch it, or click a line to see memory at that moment.</li>
+        <li>When every test is green, move on with <b>Next: …</b>.</li>
+      </ol>
+      <p>Everything runs in your browser. There is nothing to install and no account.</p>
+    </section>
+
+    <section id="screen">
+      <h2>The screen</h2>
+      <dl>
+        <dt>Exercise card</dt><dd>The goal in plain words, the prototype from the subject, the functions you may call, and live checks: prototype, allowed functions, compile problems, subject rules and a partial Norm check.</dd>
+        <dt>Your code</dt><dd>Your file for this exercise, saved in this browser. Problems that would stop <code>cc -Wall -Wextra -Werror</code> appear right under it.</dd>
+        <dt>Steps to get there</dt><dd>The plan, one step per placeholder. Reveal a step only when you need it (see <a href="#stuck">Getting unstuck</a>).</dd>
+        <dt>Tests</dt><dd>Click a test to make it the one that runs and that the memory view shows. A failing test says what was expected and what your code gave.</dd>
+        <dt>Step controls</dt><dd>First, back, play, next, last, and a slider. The sentence under them says what the last line did and what runs next.</dd>
+        <dt>Memory and Flow</dt><dd>Two views of the same moment. Memory shows variables and bytes; Flow shows the function as a flowchart with the line about to run highlighted and a count of how often each line ran.</dd>
+        <dt>Free code</dt><dd>A mode for any C in the <a href="#limits">supported subset</a>: paste a program with a <code>main</code>, or load an example.</dd>
+      </dl>
+    </section>
+
+    <section id="memory">
+      <h2>Reading memory</h2>
+      <p>Each function call has a <b>stack frame</b> with its variables. The frame with a blue outline is the one running. Below the frames, every array, string literal and <code>malloc</code> block is drawn as a row of cells, one per element.</p>
+      <ul class="legend-list">
+        <li><i class="lg read"></i><b>Read</b>: the last line read this cell.</li>
+        <li><i class="lg write"></i><b>Written</b>: the last line changed this cell.</li>
+        <li><i class="lg nul"></i><b><code>'\0'</code></b>: the terminator that ends a C string.</li>
+        <li><i class="lg uninit"></i><b>Never written</b>: the cell holds garbage until you set it.</li>
+        <li><i class="lg bad"></i><b>Out of bounds</b>: a cell past the end of a block that your code touched. It does not belong to you.</li>
+        <li><i class="lg leak"></i><b>Leaked</b>: a heap block nothing points to any more, so it can never be freed.</li>
+      </ul>
+      <p><b>Arrows are pointers.</b> A dot in a variable is where the pointer is stored; the arrow ends at the cell it points to. Small labels above cells (<code>s</code>, <code>dst</code>, <code>s[i]</code>) name what points there or what was just accessed.</p>
+      <p>When you step forward one line, changes animate: new frames drop in and returning frames slide away, arrows glide when a pointer moves, values flip, a copied byte flies from its source to its destination, new heap blocks grow in and freed ones crumble. Stepping back and dragging the slider stay instant. Turn animations off with the switch in the header; your system's "reduce motion" setting turns them off too.</p>
+      <p><b>Expert view</b> adds addresses, element types and byte details. The default view hides them so the shapes are easier to read.</p>
+    </section>
+
+    <section id="stuck">
+      <h2>Getting unstuck</h2>
+      <p>Help comes in small doses, and you decide when.</p>
+      <ol>
+        <li><b>Stuck? Ask me a question</b> gives a question that points at the idea, then the concept behind it.</li>
+        <li>Each step of the plan reveals in levels: what the step achieves, a plain-language description, the C with blanks (<code>while (s[__] != __)</code>), and finally the code with a <b>Put it in my code</b> button.</li>
+      </ol>
+      <p>Revealing full code marks the exercise as <b>assisted</b> on the rail (a ring around its mark). Nothing is revealed unless you ask. If you used the code, try writing the function again from scratch a day later: that is when it sticks.</p>
+    </section>
+
+    <section id="checks">
+      <h2>What is checked</h2>
+      <dl>
+        <dt>Behaviour</dt><dd>Each exercise has tests from the subject and the man pages, including edge cases (empty strings, overlapping memory, <code>INT_MIN</code>, size 0). Functions that allocate are also tested with <code>malloc</code> failing: they must return <code>NULL</code> and free everything they already allocated.</dd>
+        <dt>Memory</dt><dd>Every test fails on a memory error or a leak, even when the result is right. The subject gives 0 for a crash or a leak.</dd>
+        <dt>Prototype and allowed functions</dt><dd>Your prototype must match the subject exactly, and you may only call the functions the subject allows plus your own libft functions.</dd>
+        <dt>Compiler</dt><dd>Problems that make <code>cc -Wall -Wextra -Werror</code> refuse your file: unused variables and parameters, a function called before it is declared, and comparing signed with unsigned values.</dd>
+        <dt>Subject rules</dt><dd>No global variables, and helper functions must be <code>static</code>.</dd>
+        <dt>Norm (partial)</dt><dd>Line length, trailing spaces, tabs for indentation and alignment, space after <code>if</code>/<code>while</code>/<code>return</code>, <code>return (value);</code>, no comments inside functions, at most 25 lines, 4 parameters, 5 variables and 5 functions, declarations at the top and not initialised, one declaration per line, no <code>for</code>.</dd>
+      </dl>
+      <p class="note-box">A green exercise here is strong evidence, not a guarantee. Always confirm with the real <code>cc -Wall -Wextra -Werror</code>, <code>norminette</code>, and your own tests before you submit.</p>
+    </section>
+
+    <section id="bugs">
+      <h2>Bugs it catches</h2>
+      <p>Each one stops the run at the exact line with an explanation in plain words:</p>
+      <ul class="cols">
+        <li>Reading or writing past the end of an array or a <code>malloc</code> block</li>
+        <li>Dereferencing <code>NULL</code></li>
+        <li>Using memory after <code>free</code></li>
+        <li>Freeing twice, or freeing a pointer <code>malloc</code> did not return</li>
+        <li>Writing into a string literal</li>
+        <li>Using a pointer to a local variable after its function returned</li>
+        <li>Using a variable before giving it a value</li>
+        <li>A function that ends without returning a value</li>
+        <li>Division by zero and out-of-range shifts</li>
+        <li>Signed overflow (a warning, since it is undefined behaviour)</li>
+        <li>Loops that never end, runaway recursion, and memory leaks</li>
+      </ul>
+    </section>
+
+    <section id="limits">
+      <h2>Supported C and limits</h2>
+      <p>The app runs your code with an interpreter built for libft, modelling a 64-bit Mac or Linux machine (<code>char</code> is signed, <code>long</code> and pointers are 8 bytes).</p>
+      <p><b>Supported:</b> all integer types, <code>size_t</code>, pointers, arrays, structs, <code>typedef</code>, function pointers, <code>static</code> locals, every operator, <code>if</code>/<code>while</code>/<code>do</code>/<code>for</code>, <code>break</code>/<code>continue</code>, string and character escapes, and simple <code>#define</code>s. <code>#include</code> lines are skipped; <code>t_list</code> is provided when your file uses it.</p>
+      <p><b>Built-in libc for your tests:</b> <code>malloc</code>, <code>calloc</code>, <code>free</code>, <code>write</code>, <code>printf</code>, <code>puts</code>, <code>putchar</code> and the usual string, memory and <code>ctype</code> functions.</p>
+      <p><b>Not yet:</b> <code>float</code>/<code>double</code>, <code>union</code>, <code>enum</code>, <code>switch</code>, <code>goto</code>, macros with arguments and <code>va_list</code>.</p>
+      <p><b>Limits:</b> 300,000 steps per run, 20,000 allocations, 1 MB per allocation, 64 KB of output, 400 nested calls, and the first 3,000 steps are recorded for stepping.</p>
+    </section>
+
+    <section id="privacy">
+      <h2>Privacy and your data</h2>
+      <p>Your code never leaves your computer. It runs in your browser, in a background worker. Your files, progress and settings are kept in this browser's local storage and nowhere else: clearing site data, or a private window, starts you fresh.</p>
+      <p>Pass marks are rebuilt every time the app opens by re-running your saved code, so they always reflect what your code really does.</p>
+      <p><button class="btn ghost" id="resetAll">Delete all my code and progress in this browser</button> <span id="resetMsg" class="muted"></span></p>
+    </section>
+
+    <section id="keys">
+      <h2>Shortcuts</h2>
+      <table class="keys">
+        <tr><td><kbd>→</kbd> / <kbd>←</kbd></td><td>Next / previous step (when the editor is not focused)</td></tr>
+        <tr><td><kbd>Tab</kbd></td><td>Insert a tab in the editor (the Norm indents with tabs)</td></tr>
+        <tr><td><kbd>Enter</kbd></td><td>New line, keeping the indentation</td></tr>
+        <tr><td>Click a line</td><td>Show memory at the last moment that line ran</td></tr>
+      </table>
+    </section>
+
+    <section id="faq">
+      <h2>FAQ</h2>
+      <h3>Is this allowed at 42?</h3>
+      <p>The subject asks you to reason before reaching for help and never to ask for direct answers. libft Lens is built around that: it shows what your own code does and holds answers back until you ask several times. Check your campus's rules if you are unsure.</p>
+      <h3>Why can I find the solutions in the source code?</h3>
+      <p>The app has no server, so everything it can reveal ships with the page. It is a learning tool, not an exam: the only person you can fool is yourself, and the exam has no internet.</p>
+      <h3>My code works on my Mac but fails here. Who is right?</h3>
+      <p>Usually the app: undefined behaviour such as reading one byte past a block often "works" on a real machine by luck and then fails during evaluation. If you think the app is wrong, please open an issue with the code.</p>
+    </section>
+
+    <section id="roadmap">
+      <h2>Roadmap</h2>
+      <div class="road">
+        <div class="lane">
+          <h3><span class="tag now">Now</span> Shipped</h3>
+          <ul>
+            <li>All 43 libft functions from subject v19.3, with tests, hints and step reveals</li>
+            <li>Live runs, step-through memory and flow views, step animations</li>
+            <li>Memory error and leak detection, malloc failure tests</li>
+            <li>Prototype, allowed functions, compiler, subject and partial Norm checks</li>
+          </ul>
+        </div>
+        <div class="lane">
+          <h3><span class="tag next">Next</span> AI coach</h3>
+          <ul>
+            <li><b>Chat box</b> beside the code to ask "why does this fail?" in your own words.</li>
+            <li><b>Local LLM plug</b>: connect a model running on your own machine (Ollama or any OpenAI-compatible local server), or run a small model such as Qwen2.5-Coder fully in the browser with WebGPU. Nothing is sent to a cloud.</li>
+            <li><b>Guardrails</b>: the coach only sees what the interpreter proved (the failing test, the error, the trace) and never the reference solution. Its replies are filtered so they contain questions and explanations, not code, and it follows the same reveal levels as the steps.</li>
+          </ul>
+        </div>
+        <div class="lane">
+          <h3><span class="tag later">Later</span> Beyond libft</h3>
+          <ul>
+            <li>Exercise packs: C Piscine (C00 to C13), <code>get_next_line</code>, <code>ft_printf</code></li>
+            <li>Language: <code>switch</code>, <code>enum</code>, <code>va_list</code>, file descriptors</li>
+            <li>Export and import progress; works offline as an installable app</li>
+            <li>Teacher mode: write your own exercises as data files</li>
+            <li>Translations (French, Arabic, Spanish)</li>
+            <li>Optional real-compiler check in the browser (clang compiled to WebAssembly)</li>
+          </ul>
+        </div>
+      </div>
+      <p>Ideas and bug reports are welcome as GitHub issues.</p>
+    </section>
+  </main>
+</div>
+
+<script src="src/docs.js"></script>
+</body>
+</html>

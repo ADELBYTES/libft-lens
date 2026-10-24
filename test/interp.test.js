@@ -91,7 +91,9 @@ void *ft_memmove(void *d, const void *s, size_t n) { unsigned char *a = d; const
 char *ft_strdup(const char *s) { char *d = malloc(ft_strlen(s) + 1); size_t i = 0; if (!d) return NULL; while (s[i]) { d[i] = s[i]; i++; } d[i] = 0; return d; }
 static size_t wc(char const *s, char c) { size_t n = 0; while (*s) { if (*s != c && (s[1] == c || !s[1])) n++; s++; } return n; }
 char **ft_split(char const *s, char c) { char **w = malloc(sizeof(char *) * (wc(s, c) + 1)); size_t k = 0, l;
-  while (*s) { l = 0; while (s[l] && s[l] != c) l++; if (l) { w[k] = malloc(l + 1); for (size_t j = 0; j < l; j++) w[k][j] = s[j]; w[k++][l] = 0; } s += l + (s[l] != 0); }
+  if (!w) return NULL;
+  while (*s) { l = 0; while (s[l] && s[l] != c) l++; if (l) { w[k] = malloc(l + 1); if (!w[k]) { while (k > 0) free(w[--k]); free(w); return NULL; }
+    for (size_t j = 0; j < l; j++) w[k][j] = s[j]; w[k++][l] = 0; } s += l + (s[l] != 0); }
   w[k] = NULL; return w; }
 t_list *ft_lstnew(void *c) { t_list *n = malloc(sizeof(t_list)); if (!n) return 0; n->content = c; n->next = 0; return n; }
 `;

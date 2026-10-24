@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; worker-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
 <title>libft Lens</title>
 <meta name="description" content="Write libft yourself and watch it run: memory, pointers and control flow, with hints that never write the code for you.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -17,6 +19,10 @@
     <button role="tab" id="modeEx" aria-selected="true">Exercises</button>
     <button role="tab" id="modeFree" aria-selected="false">Free code</button>
   </div>
+  <nav class="toplinks" aria-label="Help">
+    <a href="docs.html">Docs</a>
+    <a href="docs.html#roadmap">Roadmap</a>
+  </nav>
   <div class="top-actions">
     <label class="sel" id="sampleWrap" hidden><span>Example</span><select id="sample"></select></label>
     <button id="restore" class="link" hidden>Restore my code</button>
@@ -43,6 +49,7 @@
           </div>
         </div>
         <p class="ed-tip">Click a line to see memory at that moment. Your code runs as you type.</p>
+        <div id="diag" aria-live="polite"></div>
         <div id="blocks"></div>
         <div id="stuck"></div>
       </div>

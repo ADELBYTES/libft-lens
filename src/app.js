@@ -1,7 +1,7 @@
 import { CSyntaxError } from "./parser.js";
 import { run } from "./interp.js";
 import { buildFlow } from "./flow.js";
-import { checkFunction, normCheck } from "./checks.js";
+import { checkFunction, normCheck, fileCheck } from "./checks.js";
 import { CATALOG, TESTS } from "./libft.js";
 import { EX, ORDER, PARTS } from "./exercises.js";
 import { expand, insertBlock, PLACEHOLDER_RE } from "./blocks.js";
@@ -17,6 +17,7 @@ const store = {
 };
 const PTR = ["var(--accent)", "var(--ptr2)", "var(--ptr3)", "var(--ptr4)"];
 const reduceMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+const MAX_CODE = 100000;
 const REF = Object.fromEntries(ORDER.map((n) => [n, expand(EX[n].solution)]));
 
 const S = {
@@ -59,10 +60,10 @@ function analyze() {
   try {
     const program = compile(assemble({ code: S.code }));
     const fns = program.items.filter((f) => f.k === "func" && f.file === "main");
-    S.live = { program, error: null, fns, checks: fns.filter((f) => f.name !== "main").map((f) => checkFunction(program, f)), norm: normCheck(program, S.code) };
+    S.live = { program, error: null, fns, checks: fns.filter((f) => f.name !== "main").map((f) => checkFunction(program, f)), norm: normCheck(program, S.code), file: fileCheck(program, S.code, { libft: S.mode === "ex" }) };
   } catch (e) {
     if (!(e instanceof CSyntaxError)) throw e;
-    S.live = { ...(S.live && !S.live.error ? S.live : { fns: [], checks: [], norm: [] }), error: { msg: e.message, line: e.line } };
+    S.live = { ...(S.live && !S.live.error ? S.live : { fns: [], checks: [], norm: [], file: [] }), error: { msg: e.message, line: e.line } };
   }
 }
 
@@ -230,6 +231,7 @@ function onCodeChanged() {
   renderEditor();
   clearTimeout(liveTimer);
   setLive("waiting for you to pause…", "busy");
+  if (S.code.length > MAX_CODE) { setLive(`file is over ${MAX_CODE / 1000} KB: too large to run here`, "bad"); return; }
   liveTimer = setTimeout(() => { analyze(); runNow(); }, 450);
 }
 
@@ -287,6 +289,7 @@ function renderNarr() {
     else if (ev.k === "r" && ev.label && shown.has(ev.block) && /[[*>]/.test(ev.label) && reads < 3 && ev.text) { reads++; did.push(`Read <code>${esc(ev.label)}</code> → <b>${esc(valText(ev.text))}</b>.`); }
     else if (ev.k === "call" && !ev.builtin && S.trace.program.items.some((f) => f.k === "func" && f.name === ev.name && f.file === "lib")) did.push(`Called the linked <code>${esc(ev.name)}()</code>${linkedFrom(ev.name)}.`);
     else if (ev.k === "free") did.push("Freed a heap block.");
+    else if (ev.k === "note") did.push(esc(ev.msg));
     else if (ev.k === "out") did.push(`Printed <code>${esc(JSON.stringify(ev.text))}</code>.`);
     else if (ev.k === "warn") banners.push(`<div class="banner warn">${esc(ev.msg)}</div>`);
     else if (ev.k === "expect") banners.push(`<div class="banner ${ev.ok ? "ok" : "error"}">${ev.ok ? "Check passed" : "Check failed"}: ${esc(ev.msg)}</div>`);
@@ -703,6 +706,23 @@ function renderRail() {
   if (cur) cur.scrollIntoView({ block: "nearest", inline: "center" });
 }
 
+function compileIssues() {
+  const out = [...((S.live && S.live.file) || [])];
+  const seen = new Set(out.map((x) => x.msg));
+  const add = (line, msg) => { if (!seen.has(msg)) { seen.add(msg); out.push({ kind: "cc", line, msg }); } };
+  // the trace knows the line, so it goes first; test runs only add what the trace did not reach
+  if (S.trace) for (const w of S.trace.result.warnings) if (w.cc && (w.file === "main" || !w.file)) add(w.line, w.msg);
+  if (S.mode === "ex") for (const r of S.testRes[S.exId] || []) for (const m of r.cc || []) add(null, m);
+  return out.sort((x, y) => (x.line || 1e9) - (y.line || 1e9));
+}
+
+function renderDiag() {
+  const issues = compileIssues();
+  $("diag").innerHTML = issues.length
+    ? `<ul class="issues">${issues.slice(0, 6).map((x) => `<li>${x.line ? `Line ${x.line}: ` : ""}${esc(x.msg)}</li>`).join("")}${issues.length > 6 ? `<li>and ${issues.length - 6} more</li>` : ""}</ul>`
+    : "";
+}
+
 function renderExCard() {
   const card = $("exCard");
   card.hidden = S.mode !== "ex";
@@ -717,6 +737,9 @@ function renderExCard() {
     checks += chk.protoOk ? '<span class="chip ok">✓ prototype</span>' : '<span class="chip bad">✗ prototype</span>';
     checks += chk.forbidden.length ? `<span class="chip bad">✗ uses ${esc([...new Set(chk.forbidden.map((f) => f.name))].join(", "))}</span>` : '<span class="chip ok">✓ allowed functions</span>';
     checks += norm.length ? `<span class="chip warn">${norm.length} Norm issue${norm.length > 1 ? "s" : ""}</span>` : '<span class="chip ok">✓ Norm (partial)</span>';
+    const ci = compileIssues();
+    if (ci.some((x) => x.kind === "cc")) checks += '<span class="chip bad">✗ cc -Werror would refuse</span>';
+    if (ci.some((x) => x.kind === "subject")) checks += '<span class="chip bad">✗ subject rule</span>';
   }
   const issues = [];
   if (chk && !chk.protoOk) issues.push(`Your prototype is <code>${esc(chk.got)}</code>; the subject says <code>${esc(chk.expected)}</code>.`);
@@ -811,7 +834,7 @@ function renderAll() {
   $("modeFree").setAttribute("aria-selected", S.mode === "free");
   $("sampleWrap").hidden = S.mode !== "free";
   $("restore").hidden = S.mode !== "free" || S.restoreCode == null;
-  renderRail(); renderExCard(); renderBlocks(); renderStuck(); renderTests(); renderStep(false);
+  renderRail(); renderExCard(); renderDiag(); renderBlocks(); renderStuck(); renderTests(); renderStep(false);
 }
 
 // animate only a single step forward: jumps, scrubbing and stepping back stay instant
@@ -927,6 +950,38 @@ $("restore").onclick = () => {
   renderAll();
 };
 
+/* ---------------- progress you cannot fake ---------------- */
+
+// Pass marks live in this browser's storage, where anyone can edit them, so
+// on load every saved file is re-run against its tests and the marks are
+// rebuilt from the results. Linked functions use the built-in versions here.
+function verifyProgress() {
+  const names = ORDER.filter((n) => { const c = store.get("code:" + n, null); return c != null && c !== REF[n].starter; });
+  const builtin = (owner) => (n) => (n === owner ? null : REF[n] ? { code: REF[n].full, from: "built-in" } : null);
+  const jobs = [];
+  for (const n of names) {
+    const code = store.get("code:" + n, "");
+    if (code.length > MAX_CODE) continue;
+    for (const t of TESTS[n]) jobs.push({ n, a: assemble({ code, harness: t, library: builtin(n) }) });
+  }
+  const done = (results) => {
+    const status = {};
+    jobs.forEach((j, k) => { status[j.n] = status[j.n] === "fail" || !results[k].ok ? "fail" : "pass"; });
+    S.status = status;
+    store.set("status", status);
+    renderRail();
+  };
+  if (!jobs.length) { S.status = {}; store.set("status", {}); renderRail(); return; }
+  try {
+    const w = new Worker(new URL("./worker.js", import.meta.url), { type: "module" });
+    const timer = setTimeout(() => w.terminate(), 20000);
+    w.onmessage = (ev) => { clearTimeout(timer); w.terminate(); done(ev.data.tests); };
+    w.onerror = () => { clearTimeout(timer); w.terminate(); };
+    w.postMessage({ id: "verify", tests: jobs.map((j) => j.a) });
+  } catch { /* no worker: keep the stored marks until the next run */ }
+}
+
 /* ---------------- boot ---------------- */
 
 if (S.mode === "ex") openExercise(S.exId); else openFree();
+setTimeout(verifyProgress, 1200);

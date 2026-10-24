@@ -14,7 +14,9 @@ export function summarize(r) {
   const ok = !r.error && r.expects.length > 0 && r.expects.every((x) => x.ok) && !r.leaks.length;
   // warnings such as a missing return usually explain a failure
   if (!ok) for (const w of [...new Set(r.warnings.map((x) => x.msg))].slice(0, 2)) msgs.push(w);
-  return { ok, msgs };
+  // compile errors cc would raise (such as -Wsign-compare), reported even when behaviour is right
+  const cc = [...new Set(r.warnings.filter((x) => x.cc).map((x) => x.msg))];
+  return { ok, msgs, cc };
 }
 
 function runOne(a, trace) {

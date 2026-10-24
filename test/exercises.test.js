@@ -6,7 +6,7 @@ import { assemble, compile } from "../src/program.js";
 import { run } from "../src/interp.js";
 import { summarize } from "../src/worker.js";
 import { CATALOG, TESTS } from "../src/libft.js";
-import { checkFunction, normCheck } from "../src/checks.js";
+import { checkFunction, normCheck, fileCheck } from "../src/checks.js";
 
 const ref = Object.fromEntries(ORDER.map((n) => [n, expand(EX[n].solution)]));
 const library = (n) => (ref[n] ? { code: ref[n].full, from: "reference" } : null);
@@ -29,6 +29,7 @@ for (const n of ORDER) {
     for (const t of TESTS[n]) {
       const r = runTest(full, t);
       assert.ok(r.ok, `${n} / ${t.name}: ${r.msgs.join(" | ")}`);
+      assert.deepEqual(r.cc, [], `${n} / ${t.name} compiles cleanly`);
     }
     const program = compile(assemble({ code: full }));
     const fn = program.items.find((it) => it.k === "func" && it.name === n);
@@ -36,6 +37,7 @@ for (const n of ORDER) {
     assert.equal(chk.protoOk, true, `${n} prototype: ${chk.got} vs ${chk.expected}`);
     assert.deepEqual(chk.forbidden, [], `${n} uses only allowed functions`);
     assert.deepEqual(normCheck(program, full), [], `${n} passes the partial Norm check`);
+    assert.deepEqual(fileCheck(program, full), [], `${n} has no compile or subject issues`);
     // the starter, and the starter with each single block filled in, must compile
     compile(assemble({ code: starter }));
     for (const b of blocks) {

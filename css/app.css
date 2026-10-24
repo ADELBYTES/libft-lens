@@ -311,3 +311,8 @@ code, .mono, .hl, #code, .gutter, .proto, .code-ro, .out, .step pre, .flow, .mem
 @keyframes leakpulse { 50% { box-shadow: 0 0 0 4px var(--bad-soft); } }
 .flow .focus { fill: none; stroke: var(--accent); stroke-width: 2; stroke-dasharray: 4 3; opacity: .8; }
 @media (prefers-reduced-motion: reduce) { .curbar.glide { transition: none; } }
+
+.toplinks { display: flex; gap: 14px; font-size: 14px; font-weight: 700; }
+.toplinks a { color: var(--muted); text-decoration: none; }
+.toplinks a:hover, .toplinks a:focus-visible { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+#diag .issues { margin-top: 8px; }
