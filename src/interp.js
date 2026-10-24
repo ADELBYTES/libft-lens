@@ -25,6 +25,8 @@ const STACK_TOP = MEM_SIZE - 0x10;
 const REDZONE = 16;
 const MAX_MALLOC = 1 << 20;
 const MAX_ALLOCS = 20000;
+const VA_BASE = 0x3000;
+const VA_LIMIT = 0x4000;
 const MAX_OUTPUT = 64 * 1024;
 
 export const hex = (n) => "0x" + n.toString(16);
@@ -52,6 +54,10 @@ export function exprStr(e) {
     case "comma": return `${exprStr(e.l)}, ${exprStr(e.r)}`;
     case "sizeof_t": return `sizeof(${typeName(e.type)})`;
     case "sizeof_e": return `sizeof ${wrapP(e.e)}`;
+    case "va_arg": return `va_arg(${exprStr(e.ap)}, ${typeName(e.type)})`;
+    case "va_start": return `va_start(${exprStr(e.ap)}, ${exprStr(e.last)})`;
+    case "va_copy": return `va_copy(${exprStr(e.dst)}, ${exprStr(e.src)})`;
+    case "va_end": return `va_end(${exprStr(e.ap)})`;
   }
   return "?";
 }
@@ -297,6 +303,40 @@ function makeBuiltins(I) {
     }),
     abs: B(T.int, [T.int], ([x]) => ({ t: T.int, v: wrap(x.v < 0n ? -x.v : x.v, T.int) })),
     exit: B(T.void, [T.int], ([c]) => { throw new ExitSignal(Number(c.v)); }),
+    // files live in memory: tests create them, the program opens and reads them
+    open: B(T.int, [P.cc, T.int], ([path]) => {
+      const name = I.cs(path.v), f = I.files.get(name);
+      if (!f || I.fds.size >= 64) return intv(-1);
+      const fd = I.nextFd++;
+      I.fds.set(fd, { name, bytes: f, pos: 0 });
+      I.record({ k: "open", fd, name });
+      return intv(fd);
+    }, true),
+    read: B(P.ssz, [T.int, P.v, P.sz], ([fd, buf, n]) => {
+      const o = I.fds.get(Number(fd.v));
+      if (!o) { I.record({ k: "read", fd: Number(fd.v), count: -1 }); return { t: P.ssz, v: -1n }; }
+      const want = Number(BigInt.asUintN(64, n.v));
+      const count = Math.max(0, Math.min(want, o.bytes.length - o.pos));
+      for (let k = 0; k < count; k++) wr(buf.v + k, o.bytes[o.pos + k], `read() writing byte ${k} into the buffer`);
+      range("w", buf.v, count, "read() into the buffer");
+      o.pos += count;
+      I.record({ k: "read", fd: Number(fd.v), count, want });
+      return { t: P.ssz, v: BigInt(count) };
+    }),
+    close: B(T.int, [T.int], ([fd]) => intv(I.fds.delete(Number(fd.v)) ? 0 : -1)),
+    __mkfile: B(T.void, [P.cc, P.cc], ([name, content]) => { I.files.set(I.cs(name.v), I.bytesAt(content.v)); return { t: T.void }; }),
+    __set_stdin: B(T.void, [P.cc], ([content]) => { I.fds.set(0, { name: "stdin", bytes: I.bytesAt(content.v), pos: 0 }); return { t: T.void }; }),
+    // compares what the program printed since the last check with the real printf; a NULL %p may print as 0x0 (macOS) or (nil) (Linux)
+    __expect_printf: B(T.int, [T.int, P.cc], (args) => {
+      const [got, fmt] = args;
+      const out = I.stdout;
+      const variants = ["0x0", "(nil)"].map((nil) => new TextDecoder().decode(new Uint8Array(I.format(args.slice(1), (a) => [...I.bytesAt(a)], rd, { nil }))));
+      const ok = variants.some((v) => v === out && Number(got.v) === new TextEncoder().encode(v).length);
+      const ref = variants.find((v) => v === out) || variants[1];
+      I.expect(ok, `ft_printf(${JSON.stringify(I.cs(fmt.v))}): expected ${JSON.stringify(ref)} returning ${new TextEncoder().encode(ref).length}, got ${JSON.stringify(out)} returning ${got.v}`);
+      I.outLen = 0; I.stdout = "";
+      return intv(ok ? 1 : 0);
+    }, true),
     // test-only helpers used by the libft test drivers
     __expect_int: B(T.int, [T.long, T.long, P.cc], ([got, exp, what]) => {
       const ok = got.v === exp.v;
@@ -315,9 +355,9 @@ function makeBuiltins(I) {
       return intv(ok ? 1 : 0);
     }),
     __expect_str: B(T.int, [P.cc, P.cc, P.cc], ([got, exp, what]) => {
-      if (got.v === 0) { I.expect(false, `${I.cs(what.v)}: expected "${I.cs(exp.v)}", got NULL`); return intv(0); }
+      if (got.v === 0) { I.expect(false, `${I.cs(what.v)}: expected ${JSON.stringify(I.cs(exp.v))}, got NULL`); return intv(0); }
       const g = I.cs(got.v), e = I.cs(exp.v);
-      I.expect(g === e, `${I.cs(what.v)}: expected "${e}", got "${g}"`);
+      I.expect(g === e, `${I.cs(what.v)}: expected ${JSON.stringify(e)}, got ${JSON.stringify(g)}`);
       return intv(g === e ? 1 : 0);
     }),
     __expect_mem: B(T.int, [P.v, P.v, P.sz, P.cc], ([a, b, n, what]) => {
@@ -394,6 +434,11 @@ class Interp {
     this.file = "main";
     this.literals = new Map();
     this.statics = new Map();
+    this.vaLists = new Map();
+    this.vaNext = VA_BASE;
+    this.files = new Map();
+    this.fds = new Map();
+    this.nextFd = 3;
     this.prev = { node: null, line: 0, file: null };
     this.truncated = false;
     this.codeAddr = new Map();
@@ -426,6 +471,11 @@ class Interp {
     return true;
   }
   expect(ok, msg) { this.expects.push({ ok, msg, line: this.line }); this.record({ k: "expect", ok, msg }); }
+  bytesAt(addr) { // bytes of a C string, for test helpers
+    const out = [];
+    for (let k = 0; addr && k < 65536; k++) { const c = this.mem.bytes[addr + k]; if (!c) break; out.push(c); }
+    return new Uint8Array(out);
+  }
   cs(addr) { // read a C string for messages without bounds errors
     if (!addr) return "NULL";
     const out = [];
@@ -585,8 +635,11 @@ class Interp {
 
   callUser(f, args, callNode) {
     if (this.frames.length > 400) throw new CRuntimeError(`Stack overflow: ${f.name}() is nested more than 400 calls deep. Is a recursive function missing its base case?`, "stack");
-    if (args.length !== f.params.length) throw new CRuntimeError(`${f.name}() takes ${f.params.length} argument${f.params.length === 1 ? "" : "s"} but was called with ${args.length}.`, "call");
+    const variadic = f.type.variadic;
+    if (variadic ? args.length < f.params.length : args.length !== f.params.length) throw new CRuntimeError(`${f.name}() takes ${variadic ? "at least " : ""}${f.params.length} argument${f.params.length === 1 ? "" : "s"} but was called with ${args.length}.`, "call");
     const fr = { id: this.frameId++, name: f.name, fn: f, scopes: [new Map()], vars: [], declCache: new Map(), sp: this.mem.sp, callLine: this.line, callFile: this.file };
+    // arguments matching ... get the default promotions: char and short travel as int
+    if (variadic) fr.varargs = args.slice(f.params.length).map((v) => (v.t.k === "int" && v.t.size < 4 ? this.convert(v, T.int) : v));
     this.frames.push(fr);
     const savedLine = this.line, savedFile = this.file;
     f.params.forEach((p, k) => {
@@ -607,6 +660,7 @@ class Interp {
       else { this.warn(`${f.name}() reached its closing } without a return. The caller gets a garbage value.`); ret = { t: rt, v: rt.k === "ptr" ? 0xdeadbeef : wrap(0xbebebeben, rt), garbage: true }; }
     } else ret = { t: T.void };
     if (ret.uninit) this.warn(`${f.name}() returns a variable that was never given a value. The caller gets garbage.`);
+    for (const st of this.vaLists.values()) if (st.frame === fr.id && !st.ended) { st.ended = true; this.warn(`${f.name}() returns without va_end for a va_list it started. Every va_start needs a va_end.`); }
     this.line = f.endLine;
     this.step("return", f.exitId, f.endLine, f.file, { retVal: ret.t.k === "void" ? null : this.valueText(ret), retFn: f.name });
     this.frames.pop();
@@ -652,7 +706,7 @@ class Interp {
     return b.impl(conv);
   }
 
-  format(args, cstr, rd) {
+  format(args, cstr, rd, opts = {}) {
     const fmt = cstr(args[0].v, "printf() format");
     let ai = 1;
     const out = [];
@@ -677,7 +731,7 @@ class Interp {
       else if (conv === "x" || conv === "X") { s = BigInt.asUintN(bits, iv).toString(16); if (conv === "X") s = s.toUpperCase(); }
       else if (conv === "o") s = BigInt.asUintN(bits, iv).toString(8);
       else if (conv === "c") s = String.fromCharCode(Number(BigInt.asUintN(8, iv)));
-      else if (conv === "p") s = a.v ? hex(Number(a.v)) : "0x0";
+      else if (conv === "p") s = a.v ? hex(Number(a.v)) : opts.nil || "0x0";
       else if (conv === "s") {
         if (!a.v) s = "(null)";
         else {
@@ -920,8 +974,59 @@ class Interp {
       case "sizeof_t": return { t: T.ulong, v: BigInt(sizeOf(e.type)) };
       case "sizeof_e": return { t: T.ulong, v: BigInt(sizeOf(this.typeOf(e.e))) };
       case "call": return this.call(e);
+      case "va_start": case "va_arg": case "va_copy": case "va_end": return this.vaOp(e);
     }
     throw new CRuntimeError(`unsupported expression ${e.k}`, "internal");
+  }
+
+  vaOp(e) {
+    const fr = this.frames[this.frames.length - 1];
+    const handle = (expr) => {
+      const v = this.rv(expr);
+      const st = this.vaLists.get(v.v);
+      if (!st) throw new CRuntimeError(`${exprStr(expr)} was never started with va_start, so it does not point at any arguments.`, "va");
+      if (st.ended) throw new CRuntimeError(`${exprStr(expr)} is used after va_end.`, "va");
+      return st;
+    };
+    const fresh = (state) => {
+      if (this.vaNext >= VA_LIMIT) throw new CRuntimeError("Too many va_start or va_copy calls in one run.", "limit");
+      const addr = this.vaNext;
+      this.vaNext += 16;
+      this.vaLists.set(addr, state);
+      return addr;
+    };
+    switch (e.k) {
+      case "va_start": {
+        if (!fr.varargs) throw new CRuntimeError(`va_start is used in ${fr.name}(), which does not take ... arguments.`, "va");
+        const last = fr.fn.params[fr.fn.params.length - 1];
+        if (!last || e.last.k !== "id" || e.last.name !== last.name) this.warn(`The second argument of va_start must be the last named parameter${last ? ` (${last.name})` : ""}. cc -Wall -Wextra -Werror refuses this.`, true);
+        const l = this.lv(e.ap);
+        this.mem.store(l.addr, l.t, { t: l.t, v: fresh({ args: fr.varargs, pos: 0, frame: fr.id, fn: fr.name }) }, l.label);
+        this.record({ k: "va", what: "start", total: fr.varargs.length });
+        return { t: T.void };
+      }
+      case "va_arg": {
+        const st = handle(e.ap);
+        if (st.pos >= st.args.length) throw new CRuntimeError(`va_arg asked for extra argument ${st.pos + 1}, but only ${st.args.length} ${st.args.length === 1 ? "was" : "were"} passed. Does the format have more conversions than there are arguments?`, "va");
+        if (e.type.k === "int" && e.type.size < 4) this.warn(`va_arg(..., ${typeName(e.type)}) cannot work: ${typeName(e.type)} is promoted to int when passed through '...'. Use va_arg(ap, int). cc -Wall -Wextra -Werror refuses this.`, true);
+        const v = st.args[st.pos++];
+        if ((e.type.k === "ptr") !== (v.t.k === "ptr")) this.warn(`va_arg asked for ${typeName(e.type)}, but extra argument ${st.pos} is ${typeName(v.t)}. The conversion and the argument do not match.`);
+        this.record({ k: "va", what: "arg", index: st.pos, total: st.args.length, text: this.valueText(v), label: exprStr(e) });
+        return this.convert(v, e.type, "va_arg");
+      }
+      case "va_copy": {
+        const st = handle(e.src);
+        const l = this.lv(e.dst);
+        this.mem.store(l.addr, l.t, { t: l.t, v: fresh({ args: st.args, pos: st.pos, frame: fr.id, fn: fr.name }) }, l.label);
+        return { t: T.void };
+      }
+      case "va_end": {
+        handle(e.ap).ended = true;
+        this.record({ k: "va", what: "end" });
+        return { t: T.void };
+      }
+    }
+    throw new CRuntimeError(`unsupported ${e.k}`, "internal");
   }
 
   overflowCheck(res, exact, e) {
@@ -1008,6 +1113,7 @@ class Interp {
       }
       case "assign": return this.typeOf(e.l);
       case "sizeof_t": case "sizeof_e": return T.ulong;
+      case "va_arg": return e.type;
     }
     throw new CRuntimeError(`sizeof cannot work out the type of ${exprStr(e)}`, "type");
   }
@@ -1023,6 +1129,10 @@ class Interp {
 
   target(addr) {
     if (addr === 0) return { null: true };
+    if (addr >= VA_BASE && addr < VA_LIMIT) {
+      const st = this.vaLists.get(addr);
+      return st ? { va: { next: st.pos, total: st.args.length, ended: !!st.ended } } : { wild: true };
+    }
     const fnName = this.codeByAddr.get(addr);
     if (fnName) return { fn: fnName };
     let b = this.mem.find(addr);
@@ -1061,14 +1171,23 @@ class Interp {
 
   describe() {
     const m = this.mem;
-    const frames = this.frames.map((fr) => ({
-      id: fr.id, name: fr.name,
-      vars: fr.vars.filter((v) => v.block.alive).map((v) => {
-        const base = { name: v.name, type: typeName(v.t), addr: v.addr, block: v.block.id, param: !!v.param };
-        if (v.t.k === "arr") return { ...base, kind: "arr" };
-        return { ...base, ...this.scalarCell(v.addr, v.t) };
-      }),
-    }));
+    const view = (v) => {
+      const base = { name: v.name, type: typeName(v.t), addr: v.addr, block: v.block.id, param: !!v.param };
+      if (v.t.k === "arr") return { ...base, kind: "arr" };
+      return { ...base, ...this.scalarCell(v.addr, v.t) };
+    };
+    // static locals and globals outlive every call, so they get their own box
+    const kept = [...this.globals.values(), ...this.statics.values()].filter((v) => v.block.alive);
+    const frames = this.frames.map((fr) => {
+      const out = { id: fr.id, name: fr.name, vars: fr.vars.filter((v) => v.block.alive && !v.isStatic).map(view) };
+      if (fr.varargs) {
+        const st = [...this.vaLists.values()].reverse().find((x) => x.frame === fr.id && !x.ended);
+        out.vars.push({ name: "...", kind: "varargs", type: `${fr.varargs.length} extra`, items: fr.varargs.map((v) => this.valueText(v)), next: st ? st.pos : null });
+      }
+      return out;
+    });
+    if (kept.length) frames.unshift({ id: 0, name: "static memory", isStatic: true, vars: kept.map((v) => ({ ...view(v), owner: v.block.fnName || null })) });
+    const files = [...this.fds].map(([fd, o]) => ({ fd, name: o.name, size: o.bytes.length, pos: o.pos, bytes: Array.from(o.bytes.slice(0, 160)) }));
     // pointer sources: [{addr, to}] used to infer how to draw heap and literal blocks
     const sources = [];
     const collect = (cell, to) => {
@@ -1081,7 +1200,7 @@ class Interp {
       if (t.k === "ptr" && cell.kind === "ptr") cell.toT = t.to;
       if (t.k === "struct" && cell.kind === "struct") t.fields.forEach((f, k) => tagPtrTypes(addr + f.offset, f.type, cell.fields[k]));
     };
-    for (const fr of this.frames) for (const v of fr.vars) {
+    for (const v of [...this.frames.flatMap((fr) => fr.vars.filter((x) => !x.isStatic)), ...kept]) {
       if (!v.block.alive || v.t.k === "arr") continue;
       const cell = this.scalarCell(v.addr, v.t);
       tagPtrTypes(v.addr, v.t, cell);
@@ -1142,7 +1261,7 @@ class Interp {
         elem: typeName(et), elemSize: es, count: n, cells, more: Math.max(0, n - 64), lost,
       });
     }
-    return { frames, blocks };
+    return { frames, blocks, files };
   }
 }
 

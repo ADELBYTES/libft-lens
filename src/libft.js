@@ -2,6 +2,8 @@
 // hint ladders. Test drivers are plain C mains that use the __expect_*
 // helpers built into the interpreter. Hints never contain C.
 
+import { CATALOG_MORE, TESTS_MORE } from "./packs.js";
+
 export const LIST_PRELUDE = "typedef struct s_list { void *content; struct s_list *next; } t_list;\n";
 
 const W = "write", M = "malloc", F = "free";
@@ -53,6 +55,10 @@ export const CATALOG = {
 };
 
 // a test driver: optional helper code, then a main running the checks
+// every libft function belongs to the libft pack; ft_printf and get_next_line add their own
+for (const k of Object.keys(CATALOG)) CATALOG[k].pack = "libft";
+Object.assign(CATALOG, CATALOG_MORE);
+
 const T = (name, body, pre = "") => ({ name, code: `${pre ? pre.trim() + "\n\n" : ""}int\tmain(void)\n{\n${body.trim().split("\n").map((l) => "\t" + l.trim()).join("\n")}\n\treturn (0);\n}\n` });
 
 const charTests = (fn, yes, no) => [
@@ -231,3 +237,5 @@ TESTS.ft_lstnew.push(failing("ft_lstnew", 'ft_lstnew("x")'));
 TESTS.ft_split.push(T("frees everything when a malloc fails", `__fail_malloc_after(3);\n__expect_ptr(ft_split("ab cd ef", ' '), 0, "ft_split when its 3rd malloc fails");\n__expect_fail_hit("ft_split");`));
 TESTS.ft_lstmap.push(T("cleans up when a node cannot be made", `t_list\ta;\nt_list\tb;\n\na.content = "ab";\na.next = &b;\nb.content = "cd";\nb.next = 0;\n__fail_malloc_after(2);\n__expect_ptr(ft_lstmap(&a, dup_upper, free_content), 0, "ft_lstmap when the 2nd node fails");\n__expect_fail_hit("ft_lstmap");`,
   "static void\t*dup_upper(void *p)\n{\n\tchar\t*s;\n\n\ts = strdup(p);\n\ts[0] = s[0] - 32;\n\treturn (s);\n}\n\nstatic void\tfree_content(void *p)\n{\n\tfree(p);\n}"));
+
+Object.assign(TESTS, TESTS_MORE);

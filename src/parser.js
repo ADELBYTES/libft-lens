@@ -18,9 +18,9 @@ const ASSIGN_OPS = new Set(["=", "+=", "-=", "*=", "/=", "%=", "<<=", ">>=", "&=
 
 // `prelude` is parsed first, on line 0, so it can supply typedefs (t_list)
 // without shifting the student's line numbers.
-export function parse(src, { file = "main", prelude = "" } = {}) {
+export function parse(src, { file = "main", prelude = "", defines = {} } = {}) {
   const pre = prelude ? tokenize(prelude).slice(0, -1).map((t) => ({ ...t, line: 0, pos: 0, end: 0 })) : [];
-  const toks = [...pre, ...tokenize(src)];
+  const toks = [...pre, ...tokenize(src, defines)];
   let i = 0;
   const typedefs = new Map(Object.entries(BUILTIN_TYPEDEFS));
   const structs = new Map();
@@ -405,6 +405,17 @@ export function parse(src, { file = "main", prelude = "" } = {}) {
 
   function parsePrimary() {
     const t = peek();
+    if (t.t === "id" && /^va_(start|arg|copy|end)$/.test(t.v) && at("(", 1)) {
+      next(); next();
+      const a = parseAssign();
+      let node;
+      if (t.v === "va_arg") { expect(",", "in va_arg"); node = mk("va_arg", t, { ap: a, type: parseTypeName() }); }
+      else if (t.v === "va_start") { expect(",", "in va_start"); node = mk("va_start", t, { ap: a, last: parseAssign() }); }
+      else if (t.v === "va_copy") { expect(",", "in va_copy"); node = mk("va_copy", t, { dst: a, src: parseAssign() }); }
+      else node = mk("va_end", t, { ap: a });
+      expect(")", `to close ${t.v}`);
+      return node;
+    }
     if (t.t === "id") { next(); return mk("id", t, { name: t.v }); }
     if (t.t === "num") { next(); return mk("num", t, { v: t.v, type: literalType(t) }); }
     if (t.t === "char") { next(); return mk("num", t, { v: t.v, type: T.int, isChar: true }); }

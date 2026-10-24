@@ -4,6 +4,7 @@
 import { parse } from "./parser.js";
 import { sameType, typeName } from "./types.js";
 import { CATALOG, LIST_PRELUDE } from "./libft.js";
+import { PACK_RULES } from "./packs.js";
 import { BUILTIN_NAMES } from "./interp.js";
 
 const protoCache = new Map();
@@ -33,7 +34,13 @@ export function callsIn(fn) {
   return out;
 }
 
-export function checkFunction(program, fnItem) {
+// may code in `pack` call this catalog function? its own pack, plus libft when the subject allows it
+export function linkable(name, pack) {
+  const c = CATALOG[name];
+  return !!c && (c.pack === pack || (c.pack === "libft" && PACK_RULES[pack].libft));
+}
+
+export function checkFunction(program, fnItem, { pack: packOpt } = {}) {
   const res = { name: fnItem.name, line: fnItem.line, known: !!CATALOG[fnItem.name] };
   const userFns = new Set(program.items.filter((it) => it.k === "func").map((it) => it.name));
   const exp = expectedType(fnItem.name);
@@ -42,11 +49,11 @@ export function checkFunction(program, fnItem) {
     res.expected = typeName(exp, fnItem.name);
     res.got = typeName(fnItem.type, fnItem.name);
   }
-  // a helper outside the subject may use anything some libft function may use
-  const allowed = new Set(CATALOG[fnItem.name] ? CATALOG[fnItem.name].allowed : ["malloc", "free", "write"]);
-  // helpers you wrote yourself are always fine; anything else must be in the subject's list
-  // other libft functions are part of the library, so calling them is always fine
-  res.forbidden = callsIn(fnItem).filter((c) => !userFns.has(c.name) && !CATALOG[c.name] && !allowed.has(c.name) && !isLocalFnPtr(fnItem, c.name));
+  const pack = (CATALOG[fnItem.name] && CATALOG[fnItem.name].pack) || packOpt || "libft";
+  // a helper outside the catalog may use what the project allows
+  const allowed = new Set(CATALOG[fnItem.name] ? CATALOG[fnItem.name].allowed : PACK_RULES[pack].helperAllowed);
+  // your own helpers are fine, and so are functions of the same project (and libft, where allowed)
+  res.forbidden = callsIn(fnItem).filter((c) => !userFns.has(c.name) && !linkable(c.name, pack) && !allowed.has(c.name) && !isLocalFnPtr(fnItem, c.name));
   res.forbidden.forEach((c) => (c.builtin = BUILTIN_NAMES.includes(c.name)));
   return res;
 }
@@ -123,7 +130,8 @@ function tabBeforeName(line, name) {
 // What cc -Wall -Wextra -Werror and the subject would reject, found without running:
 // unused variables and parameters, functions used before they are declared,
 // and (for libft files) global variables and helpers that are not static.
-export function fileCheck(program, src, { libft = true } = {}) {
+export function fileCheck(program, src, { pack = "libft" } = {}) {
+  const rules = pack ? PACK_RULES[pack] : {};
   const issues = [];
   const lines = src.split("\n");
   const mine = program.items.filter((it) => it.file === "main" || it.file === undefined);
@@ -145,8 +153,8 @@ export function fileCheck(program, src, { libft = true } = {}) {
       if (CATALOG[c.name] || at == null || at <= c.line || (protoLine.has(c.name) && protoLine.get(c.name) < c.line)) continue;
       issues.push({ line: c.line, kind: "cc", msg: `${c.name}() is called before it is declared. cc rejects this (implicit declaration): move it above, or add its prototype.` });
     }
-    if (libft && f.name !== "main" && !CATALOG[f.name] && !f.isStatic) issues.push({ line: f.line, kind: "subject", msg: `Helper ${f.name}() must be static (subject: helpers are static functions).` });
+    if (rules.staticHelpers && f.name !== "main" && !CATALOG[f.name] && !f.isStatic) issues.push({ line: f.line, kind: "subject", msg: `Helper ${f.name}() must be static (subject: helpers are static functions).` });
   }
-  if (libft) for (const g of mine.filter((it) => it.k === "global")) issues.push({ line: g.line, kind: "subject", msg: `Global variable ${g.name} is forbidden by the subject.` });
+  if (rules.noGlobals) for (const g of mine.filter((it) => it.k === "global")) issues.push({ line: g.line, kind: "subject", msg: `Global variable ${g.name} is forbidden by the subject.` });
   return issues.sort((a, b) => a.line - b.line);
 }

@@ -1,9 +1,9 @@
 import { CSyntaxError } from "./parser.js";
 import { run } from "./interp.js";
 import { buildFlow } from "./flow.js";
-import { checkFunction, normCheck, fileCheck } from "./checks.js";
+import { checkFunction, normCheck, fileCheck, linkable } from "./checks.js";
 import { CATALOG, TESTS } from "./libft.js";
-import { EX, ORDER, PARTS } from "./exercises.js";
+import { EX, PARTS, PACKS, ALL } from "./exercises.js";
 import { expand, insertBlock, PLACEHOLDER_RE } from "./blocks.js";
 import { assemble, compile, labelsOf, testLine } from "./program.js";
 import { summarize } from "./worker.js";
@@ -18,11 +18,11 @@ const store = {
 const PTR = ["var(--accent)", "var(--ptr2)", "var(--ptr3)", "var(--ptr4)"];
 const reduceMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 const MAX_CODE = 100000;
-const REF = Object.fromEntries(ORDER.map((n) => [n, expand(EX[n].solution)]));
+const REF = Object.fromEntries(ALL.map((n) => [n, expand(EX[n].solution)]));
 
 const S = {
   mode: store.get("mode", "ex"),
-  exId: ORDER.includes(store.get("ex", "")) ? store.get("ex", "") : ORDER[0],
+  exId: ALL.includes(store.get("ex", "")) ? store.get("ex", "") : ALL[0],
   code: "",
   live: null,
   trace: null,
@@ -49,8 +49,13 @@ const loadCode = () => store.get(codeKey(), S.mode === "ex" ? REF[S.exId].starte
 
 /* ---------------- linking and running ---------------- */
 
+const packOf = (n) => (CATALOG[n] ? CATALOG[n].pack : "libft");
+// a test passes the exercise only through its mandatory tests; bonus tests are extra
+const mandatoryOk = (n, res) => TESTS[n].every((t, k) => t.bonus || (res[k] && res[k].ok));
+
 function library(name) {
   if (S.mode === "ex" && name === S.exId) return null; // never link the answer to the exercise being solved
+  if (S.mode === "ex" && !linkable(name, packOf(S.exId))) return null; // e.g. libft is forbidden in get_next_line
   const own = store.get("code:" + name, null);
   if (own && S.status[name] === "pass") return { code: own, from: "yours" };
   return REF[name] ? { code: REF[name].full, from: "built-in" } : null;
@@ -60,7 +65,7 @@ function analyze() {
   try {
     const program = compile(assemble({ code: S.code }));
     const fns = program.items.filter((f) => f.k === "func" && f.file === "main");
-    S.live = { program, error: null, fns, checks: fns.filter((f) => f.name !== "main").map((f) => checkFunction(program, f)), norm: normCheck(program, S.code), file: fileCheck(program, S.code, { libft: S.mode === "ex" }) };
+    S.live = { program, error: null, fns, checks: fns.filter((f) => f.name !== "main").map((f) => checkFunction(program, f, { pack: packOf(S.exId) })), norm: normCheck(program, S.code), file: fileCheck(program, S.code, { pack: S.mode === "ex" ? packOf(S.exId) : null }) };
   } catch (e) {
     if (!(e instanceof CSyntaxError)) throw e;
     S.live = { ...(S.live && !S.live.error ? S.live : { fns: [], checks: [], norm: [], file: [] }), error: { msg: e.message, line: e.line } };
@@ -126,8 +131,7 @@ function onResults(out) {
   S.pending = null;
   if (out.tests) {
     S.testRes[S.exId] = out.tests;
-    const allOk = out.tests.every((r) => r.ok);
-    S.status[S.exId] = allOk ? "pass" : "fail";
+    S.status[S.exId] = mandatoryOk(S.exId, out.tests) ? "pass" : "fail";
     store.set("status", S.status);
   }
   const t = out.trace;
@@ -137,7 +141,10 @@ function onResults(out) {
     S.pos = pickPos();
     S.prevArrows = {};
     const res = S.testRes[S.exId];
-    if (S.mode === "ex" && res) setLive(res.every((r) => r.ok) ? `all ${res.length} tests pass` : `${res.filter((r) => r.ok).length} of ${res.length} tests pass`, res.every((r) => r.ok) ? "ok" : "bad");
+    if (S.mode === "ex" && res) {
+      const mand = TESTS[S.exId].map((x, k) => [x, res[k]]).filter(([x]) => !x.bonus), passed = mand.filter(([, r]) => r.ok).length;
+      setLive(passed === mand.length ? `all ${mand.length} tests pass` : `${passed} of ${mand.length} tests pass`, passed === mand.length ? "ok" : "bad");
+    }
     else setLive(t.result.error ? "stopped with an error" : "ran to the end", t.result.error ? "bad" : "ok");
   } else {
     S.trace = null;
@@ -283,9 +290,12 @@ function renderNarr() {
   const shown = new Set(s.blocks.map((b) => b.id));
   let reads = 0;
   for (const ev of s.events) {
-    if (ev.bad) did.push(`Tried to ${ev.k === "w" ? "write" : "read"} <code>${esc(ev.label || "memory")}</code>, outside any valid block.`);
+    if (ev.k === "read") did.push(ev.count < 0 ? `<code>read(${ev.fd}, …)</code> failed: fd ${ev.fd} is not open, so it returned -1.` : ev.count === 0 ? `<code>read(${ev.fd}, …)</code> returned 0: the end of the file.` : `<code>read(${ev.fd}, …)</code> copied <b>${ev.count}</b> byte${ev.count === 1 ? "" : "s"} into the buffer${ev.count < ev.want ? ` (asked for ${ev.want})` : ""}.`);
+    else if (ev.k === "open") did.push(`Opened <code>${esc(ev.name)}</code> as fd <b>${ev.fd}</b>.`);
+    else if (ev.k === "va") did.push(ev.what === "start" ? `<code>va_start</code>: ${ev.total} extra argument${ev.total === 1 ? " is" : "s are"} ready to be read.` : ev.what === "arg" ? `<code>${esc(ev.label)}</code> took extra argument <b>${ev.index} of ${ev.total}</b>: <b>${esc(valText(ev.text))}</b>.` : "<code>va_end</code>: finished with the extra arguments.");
+    else if (ev.bad) did.push(`Tried to ${ev.k === "w" ? "write" : "read"} <code>${esc(ev.label || "memory")}</code>, outside any valid block.`);
     else if (ev.k === "cond") did.push(`<code>${esc(ev.label)}</code> was <b>${ev.result ? "true" : "false"}</b>${ev.loop ? (ev.result ? ", so the loop body runs" : ", so the loop ends") : ev.result ? ", so the if branch runs" : ", so the if branch is skipped"}.`);
-    else if (ev.k === "w" && ev.label && !/^argument/.test(ev.label)) did.push(`Wrote <code>${esc(ev.label)}</code> = <b>${esc(valText(ev.text) || "")}</b>.`);
+    else if (ev.k === "w" && ev.label && ev.text != null && !/^argument/.test(ev.label)) did.push(`Wrote <code>${esc(ev.label)}</code> = <b>${esc(valText(ev.text) || "")}</b>.`);
     else if (ev.k === "r" && ev.label && shown.has(ev.block) && /[[*>]/.test(ev.label) && reads < 3 && ev.text) { reads++; did.push(`Read <code>${esc(ev.label)}</code> → <b>${esc(valText(ev.text))}</b>.`); }
     else if (ev.k === "call" && !ev.builtin && S.trace.program.items.some((f) => f.k === "func" && f.name === ev.name && f.file === "lib")) did.push(`Called the linked <code>${esc(ev.name)}()</code>${linkedFrom(ev.name)}.`);
     else if (ev.k === "free") did.push("Freed a heap block.");
@@ -357,7 +367,7 @@ function renderMemory(anim = false) {
   const arrows = [];
   let colorN = 0;
   const dot = (key, target) => {
-    if (!target || target.null || target.fn || target.wild) return "";
+    if (!target || target.null || target.fn || target.wild || target.va) return "";
     const color = PTR[colorN++ % PTR.length];
     arrows.push({ key, target, color, dangling: target.dead });
     return `<span class="dot" data-src="${key}" style="background:${color}"></span>`;
@@ -367,6 +377,7 @@ function renderMemory(anim = false) {
     if (c.target && c.target.fn) return `${esc(c.target.fn)}()`;
     if (c.target && c.target.null) return "NULL";
     if (c.target && c.target.wild) return `${esc(c.text)} (wild)`;
+    if (c.target && c.target.va) { const va = c.target.va; return va.ended ? '<span class="unk">ended</span>' : `<span class="va-next">next: ${va.next + 1} of ${va.total}</span>`; }
     return S.expert ? `<span class="unk">${esc(c.text)}</span>` : "";
   };
   const topFrame = s.frames[s.frames.length - 1];
@@ -381,6 +392,11 @@ function renderMemory(anim = false) {
       }
     } else if (v.kind === "arr") val = `${dot(key, { block: v.block, off: 0 })}<span class="unk">array</span>`;
     else if (v.kind === "struct") val = `<span class="unk">struct</span>`;
+    else if (v.kind === "varargs") {
+      // the ... arguments of this call, the next one va_arg will take highlighted
+      const items = v.items.map((t, k) => `<span class="va-item${k === v.next ? " next" : v.next != null && k < v.next ? " used" : ""}">${esc(/^0x/.test(t) && !S.expert ? "ptr" : t)}</span>`).join("");
+      return `<div class="var varargs"><span class="vn">...</span><span class="vt">${esc(v.type)}</span><span class="va-items">${items || '<span class="unk">none</span>'}</span></div>`;
+    }
     else val = v.init ? esc(v.kind === "char" && S.expert ? `${v.num} '${v.text}'` : v.text) : '<span class="unk">?</span>';
     const changed = blockId != null && writtenBlocks.has(blockId);
     const nullCls = v.kind === "ptr" && v.target && v.target.null ? " null" : "";
@@ -392,18 +408,41 @@ function renderMemory(anim = false) {
   let h = '<div class="sec">Stack frames</div><div class="frames">';
   s.frames.forEach((f, fi) => {
     const top = fi === s.frames.length - 1;
+    if (f.isStatic) {
+      // static locals and globals: they stay here between calls
+      h += `<div class="frame static-f" data-key="f0"><div class="frame-h">static memory<span>kept between calls</span></div>`;
+      h += f.vars.map((v) => varRow({ ...v, type: v.owner ? `${v.type} · ${v.owner}()` : v.type }, `0.${v.owner || "g"}.${v.name}`, false, v.block)).join("") + "</div>";
+      return;
+    }
     const linked = S.trace.program.items.some((it) => it.k === "func" && it.name === f.name && it.file === "lib");
     const state = top ? (s.kind === "error" ? "crashed here" : "running") : "waiting";
-    h += `<div class="frame${top && s.frames.length > 1 ? " top-f" : ""}" data-key="f${f.id}"><div class="frame-h">${esc(f.name)}()<span>${linked ? "linked · " : ""}${state}</span></div>`;
+    h += `<div class="frame${top && s.frames.filter((x) => !x.isStatic).length > 1 ? " top-f" : ""}" data-key="f${f.id}"><div class="frame-h">${esc(f.name)}()<span>${linked ? "linked · " : ""}${state}</span></div>`;
     h += f.vars.length ? f.vars.map((v) => varRow(v, `${f.id}.${v.name}`, false, v.block)).join("") : '<div class="none">no variables yet</div>';
     h += "</div>";
   });
   h += "</div>";
 
+  // open files: what read() has consumed is dimmed, the cursor marks the next byte
+  if (s.files && s.files.length) {
+    h += '<div class="sec">Open files</div><div class="files">';
+    for (const f of s.files) {
+      const show = (b) => (b === 10 ? "\\n" : b === 9 ? "\\t" : b >= 32 && b < 127 ? String.fromCharCode(b) : "·");
+      let cells = f.bytes.map((b, k) => `<div class="fcell${k < f.pos ? " used" : ""}${k === f.pos ? " cursor" : ""}${b === 10 ? " nl" : ""}"><span class="tag">${k === f.pos ? "next" : ""}</span><span class="box">${esc(show(b))}</span></div>`).join("");
+      if (f.size > f.bytes.length) cells += `<span class="more">+${f.size - f.bytes.length} more</span>`;
+      cells += `<div class="fcell eof${f.pos >= f.size ? " cursor" : ""}"><span class="tag">${f.pos >= f.size ? "next" : ""}</span><span class="box">EOF</span></div>`;
+      h += `<div class="file"><div class="block-h"><b>fd ${f.fd}</b><span class="fname">${esc(f.name)}</span><span>read ${f.pos} of ${f.size} bytes</span></div><div class="cells-wrap"><div class="cells">${cells}</div></div></div>`;
+    }
+    h += "</div>";
+  }
+
   const blockHtml = [];
   // arrays first, then heap, then literals: most pointers then run downwards
   const order = { stack: 0, global: 1, heap: 2, rodata: 3 };
+  // a freed block stays on screen for the step that frees it, or while something still points at it
+  const freedNow = new Set(s.events.filter((ev) => ev.k === "free").map((ev) => ev.addr));
+  const pointedAt = new Set(arrows.map((a) => a.target.block));
   for (const b of [...s.blocks].sort((x, y) => order[x.kind] - order[y.kind] || x.addr - y.addr)) {
+    if (!b.alive && !freedNow.has(b.addr) && !pointedAt.has(b.id)) continue;
     const where = b.kind === "heap" ? `malloc'd${S.expert ? ` on line ${b.line}` : ""}` : b.kind === "rodata" ? "string literal" : b.owner ? `in ${b.owner}()` : "global";
     const region = !b.alive ? '<span class="region freed">freed</span>' : b.lost ? '<span class="region leak">leaked</span>' : `<span class="region ${b.kind}">${b.kind === "rodata" ? "read-only" : b.kind === "global" ? "static" : b.kind}</span>`;
     const detail = S.expert ? `${where} · ${b.count} × ${esc(b.elem)} · 0x${b.addr.toString(16)}` : `${where} · ${b.count} ${b.count === 1 ? "cell" : "cells"}`;
@@ -694,12 +733,17 @@ function renderRail() {
   const rail = $("rail");
   rail.hidden = S.mode !== "ex";
   if (rail.hidden) return;
-  let h = "", part = 0;
-  ORDER.forEach((n, i) => {
+  const pack = packOf(S.exId);
+  let h = '<div class="packs" role="tablist" aria-label="Project">' + Object.entries(PACKS).map(([id, p]) => {
+    const done = p.order.filter((n) => S.status[n] === "pass").length;
+    return `<button role="tab" data-pack="${id}" aria-selected="${id === pack}">${esc(p.title)} <span class="pk-count">${done}/${p.order.length}</span></button>`;
+  }).join("") + "</div>";
+  let part = null;
+  PACKS[pack].order.forEach((n, i) => {
     const p = CATALOG[n].part;
-    if (p !== part) { part = p; h += `<span class="part">${PARTS[p]}</span>`; }
+    if (p !== part && pack === "libft") { part = p; h += `<span class="part">${PARTS[p]}</span>`; }
     const st = S.status[n];
-    h += `<button data-ex="${n}" aria-current="${n === S.exId}"><span class="pip ${st || ""}${S.assisted[n] ? " assisted" : ""}">${st === "pass" ? "✓" : st === "fail" ? "!" : i + 1}</span>${n.slice(3)}</button>`;
+    h += `<button data-ex="${n}" aria-current="${n === S.exId}"><span class="pip ${st || ""}${S.assisted[n] ? " assisted" : ""}">${st === "pass" ? "✓" : st === "fail" ? "!" : i + 1}</span>${n.replace(/^ft_|^pf_|^gnl_/, "")}</button>`;
   });
   rail.innerHTML = h;
   const cur = rail.querySelector('[aria-current="true"]');
@@ -745,7 +789,7 @@ function renderExCard() {
   if (chk && !chk.protoOk) issues.push(`Your prototype is <code>${esc(chk.got)}</code>; the subject says <code>${esc(chk.expected)}</code>.`);
   if (chk) for (const f of chk.forbidden) issues.push(`Line ${f.line} calls <code>${esc(f.name)}()</code>. Allowed here: ${cat.allowed.length ? cat.allowed.join(", ") : "nothing"} and your own libft functions.`);
   card.innerHTML = `<div class="panel-b">
-    <div class="ex-title"><h2>${n}</h2><span class="part-l">${PARTS[cat.part]}</span><div class="chips">${ex.concepts.map((c) => `<span class="chip concept">${esc(c)}</span>`).join("")}</div></div>
+    <div class="ex-title"><h2>${n}</h2><span class="part-l">${PARTS[cat.part]} · subject ${PACKS[cat.pack].subject}</span><div class="chips">${ex.concepts.map((c) => `<span class="chip concept">${esc(c)}</span>`).join("")}</div></div>
     <p class="goal">${esc(ex.goal)}</p>
     <div class="proto">${syntax(cat.proto)}</div>
     <div class="chips"><span class="chip">allowed: ${cat.allowed.length ? cat.allowed.join(", ") : "no external functions"}</span>${checks}</div>
@@ -795,16 +839,20 @@ function renderTests() {
   if (panel.hidden) return;
   const n = S.exId, tests = TESTS[n], res = S.testRes[n];
   const sel = Math.min(S.selTest[n] || 0, tests.length - 1);
-  $("testsHint").textContent = res ? `${res.filter((r) => r.ok).length} of ${tests.length} pass` : "";
+  const mand = tests.filter((t) => !t.bonus).length;
+  $("testsHint").textContent = res ? `${tests.filter((t, k) => !t.bonus && res[k] && res[k].ok).length} of ${mand} pass` : "";
   let h = '<div class="tchips">' + tests.map((t, k) => {
     const r = res && res[k];
-    return `<button class="tchip" data-test="${k}" aria-pressed="${k === sel}"><span class="r ${r ? (r.ok ? "ok" : "bad") : "idle"}">${r ? (r.ok ? "✓" : "✗") : "·"}</span>${esc(t.name)}</button>`;
+    return `<button class="tchip${t.bonus ? " bonus" : ""}" data-test="${k}" aria-pressed="${k === sel}"><span class="r ${r ? (r.ok ? "ok" : "bad") : "idle"}">${r ? (r.ok ? "✓" : "✗") : "·"}</span>${esc(t.name.replace(/^bonus: /, ""))}${t.bonus ? '<span class="bonus-tag">bonus</span>' : ""}</button>`;
   }).join("") + "</div>";
   const r = res && res[sel];
   h += `<div class="tdetail"><span class="watch">The memory view below shows this test running your code.</span>${r && !r.ok ? r.msgs.map((m) => `<small>${esc(m)}</small>`).join("") : ""}</div>`;
-  if (res && res.every((x) => x.ok)) {
-    const next = ORDER[ORDER.indexOf(n) + 1];
-    h += `<div class="allpass"><span class="banner ok">All tests pass${S.assisted[n] ? " (with revealed code: try it again from scratch later)" : ""}.</span>${next ? `<button class="btn" data-ex="${next}">Next: ${next}</button>` : ""}</div>`;
+  if (res && mandatoryOk(n, res)) {
+    const order = PACKS[packOf(n)].order;
+    const next = order[order.indexOf(n) + 1];
+    const bonus = tests.filter((t) => t.bonus);
+    const bonusNote = bonus.length ? (bonus.every((t) => res[tests.indexOf(t)].ok) ? " Bonus too!" : " The bonus tests are optional.") : "";
+    h += `<div class="allpass"><span class="banner ok">All mandatory tests pass${S.assisted[n] ? " (with revealed code: try it again from scratch later)" : ""}.${bonusNote}</span>${next ? `<button class="btn" data-ex="${next}">Next: ${next}</button>` : ""}</div>`;
   }
   $("tests").innerHTML = h;
 }
@@ -866,7 +914,7 @@ function setCode(code) {
 function openExercise(id) {
   stop();
   S.mode = "ex"; S.exId = id; S.resetArmed = false;
-  store.set("mode", "ex"); store.set("ex", id);
+  store.set("mode", "ex"); store.set("ex", id); store.set("packEx:" + packOf(id), id);
   S.trace = null; S.cursorLine = 1;
   ta.value = S.code = loadCode();
   ta.scrollTop = 0;
@@ -891,6 +939,8 @@ $("tabMem").onclick = () => { S.tab = "mem"; $("tabMem").setAttribute("aria-sele
 $("tabFlow").onclick = () => { S.tab = "flow"; $("tabFlow").setAttribute("aria-selected", true); $("tabMem").setAttribute("aria-selected", false); $("flowView").hidden = false; $("memView").hidden = true; renderFlow(); };
 
 document.addEventListener("click", (e) => {
+  const packB = e.target.closest("[data-pack]");
+  if (packB) { const id = packB.dataset.pack; const last = store.get("packEx:" + id, null); openExercise(PACKS[id].order.includes(last) ? last : PACKS[id].order[0]); return; }
   const exB = e.target.closest("[data-ex]");
   if (exB) { openExercise(exB.dataset.ex); return; }
   const tB = e.target.closest("[data-test]");
@@ -956,13 +1006,13 @@ $("restore").onclick = () => {
 // on load every saved file is re-run against its tests and the marks are
 // rebuilt from the results. Linked functions use the built-in versions here.
 function verifyProgress() {
-  const names = ORDER.filter((n) => { const c = store.get("code:" + n, null); return c != null && c !== REF[n].starter; });
-  const builtin = (owner) => (n) => (n === owner ? null : REF[n] ? { code: REF[n].full, from: "built-in" } : null);
+  const names = ALL.filter((n) => { const c = store.get("code:" + n, null); return c != null && c !== REF[n].starter; });
+  const builtin = (owner) => (n) => (n === owner || !linkable(n, packOf(owner)) ? null : REF[n] ? { code: REF[n].full, from: "built-in" } : null);
   const jobs = [];
   for (const n of names) {
     const code = store.get("code:" + n, "");
     if (code.length > MAX_CODE) continue;
-    for (const t of TESTS[n]) jobs.push({ n, a: assemble({ code, harness: t, library: builtin(n) }) });
+    for (const t of TESTS[n]) if (!t.bonus) jobs.push({ n, a: assemble({ code, harness: t, library: builtin(n) }) });
   }
   const done = (results) => {
     const status = {};

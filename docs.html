@@ -39,12 +39,12 @@
 
   <main class="doc">
     <h1>Learn C by watching it run</h1>
-    <p class="lede">libft Lens is a practice space for the 42 libft project. You write each function yourself; the app runs it as you type and shows what it does to memory, line by line. When you are stuck it gives you the next idea, not the answer.</p>
+    <p class="lede">libft Lens is a practice space for the 42 projects libft, ft_printf and get_next_line. You write each function yourself; the app runs it as you type and shows what it does to memory, line by line. When you are stuck it gives you the next idea, not the answer.</p>
 
     <section id="start">
       <h2>Quick start</h2>
       <ol>
-        <li>Pick a function on the rail at the top. They go from easy (<code>ft_isalpha</code>) to hard (<code>ft_lstmap</code>).</li>
+        <li>Pick a project (<b>libft</b>, <b>ft_printf</b> or <b>get_next_line</b>), then a step on the rail. libft goes from easy (<code>ft_isalpha</code>) to hard (<code>ft_lstmap</code>); ft_printf and get_next_line are split into helpers first, then the function the subject asks for.</li>
         <li>Read the goal and the prototype, then replace the <code>/* ▢ 1: … */</code> placeholders with your own code. Each placeholder is one step of the plan.</li>
         <li>Stop typing for half a second: your code runs against the selected test. Press <b>Next</b> or <b>Play</b> to watch it, or click a line to see memory at that moment.</li>
         <li>When every test is green, move on with <b>Next: …</b>.</li>
@@ -78,6 +78,12 @@
       </ul>
       <p><b>Arrows are pointers.</b> A dot in a variable is where the pointer is stored; the arrow ends at the cell it points to. Small labels above cells (<code>s</code>, <code>dst</code>, <code>s[i]</code>) name what points there or what was just accessed.</p>
       <p>When you step forward one line, changes animate: new frames drop in and returning frames slide away, arrows glide when a pointer moves, values flip, a copied byte flies from its source to its destination, new heap blocks grow in and freed ones crumble. Stepping back and dragging the slider stay instant. Turn animations off with the switch in the header; your system's "reduce motion" setting turns them off too.</p>
+      <p>Three more boxes appear when your code needs them:</p>
+      <ul>
+        <li><b>Static memory</b> (dashed): <code>static</code> variables and globals. They live outside every call, so this is where get_next_line's stash survives from one call to the next.</li>
+        <li><b>Open files</b>: each file your code opened, byte by byte. What <code>read()</code> has already consumed is dimmed and <code>next</code> marks the next byte, up to <code>EOF</code>.</li>
+        <li><b>The <code>...</code> row</b> in a variadic function's frame: the extra arguments of this call. Used ones are crossed out and the one the next <code>va_arg</code> will take is highlighted; a <code>va_list</code> variable shows which argument comes next.</li>
+      </ul>
       <p><b>Expert view</b> adds addresses, element types and byte details. The default view hides them so the shapes are easier to read.</p>
     </section>
 
@@ -94,11 +100,11 @@
     <section id="checks">
       <h2>What is checked</h2>
       <dl>
-        <dt>Behaviour</dt><dd>Each exercise has tests from the subject and the man pages, including edge cases (empty strings, overlapping memory, <code>INT_MIN</code>, size 0). Functions that allocate are also tested with <code>malloc</code> failing: they must return <code>NULL</code> and free everything they already allocated.</dd>
+        <dt>Behaviour</dt><dd>Each exercise has tests from the subject and the man pages. ft_printf is compared character by character with the real <code>printf</code>, return value included (a NULL <code>%p</code> may print <code>(nil)</code> or <code>0x0</code>). get_next_line is tested with several <code>BUFFER_SIZE</code> values (1, 2, 3, 4, 42, 9999), files with and without a final newline, empty files, standard input and bad file descriptors; the bonus tests (several files at once) are optional and marked as bonus. including edge cases (empty strings, overlapping memory, <code>INT_MIN</code>, size 0). Functions that allocate are also tested with <code>malloc</code> failing: they must return <code>NULL</code> and free everything they already allocated.</dd>
         <dt>Memory</dt><dd>Every test fails on a memory error or a leak, even when the result is right. The subject gives 0 for a crash or a leak.</dd>
         <dt>Prototype and allowed functions</dt><dd>Your prototype must match the subject exactly, and you may only call the functions the subject allows plus your own libft functions.</dd>
         <dt>Compiler</dt><dd>Problems that make <code>cc -Wall -Wextra -Werror</code> refuse your file: unused variables and parameters, a function called before it is declared, and comparing signed with unsigned values.</dd>
-        <dt>Subject rules</dt><dd>No global variables, and helper functions must be <code>static</code>.</dd>
+        <dt>Subject rules</dt><dd>libft: no global variables, and helper functions must be <code>static</code>. get_next_line: no global variables, and your libft is not allowed (calls to it are flagged and not linked). ft_printf may use your libft.</dd>
         <dt>Norm (partial)</dt><dd>Line length, trailing spaces, tabs for indentation and alignment, space after <code>if</code>/<code>while</code>/<code>return</code>, <code>return (value);</code>, no comments inside functions, at most 25 lines, 4 parameters, 5 variables and 5 functions, declarations at the top and not initialised, one declaration per line, no <code>for</code>.</dd>
       </dl>
       <p class="note-box">A green exercise here is strong evidence, not a guarantee. Always confirm with the real <code>cc -Wall -Wextra -Werror</code>, <code>norminette</code>, and your own tests before you submit.</p>
@@ -125,9 +131,9 @@
     <section id="limits">
       <h2>Supported C and limits</h2>
       <p>The app runs your code with an interpreter built for libft, modelling a 64-bit Mac or Linux machine (<code>char</code> is signed, <code>long</code> and pointers are 8 bytes).</p>
-      <p><b>Supported:</b> all integer types, <code>size_t</code>, pointers, arrays, structs, <code>typedef</code>, function pointers, <code>static</code> locals, every operator, <code>if</code>/<code>while</code>/<code>do</code>/<code>for</code>, <code>break</code>/<code>continue</code>, string and character escapes, and simple <code>#define</code>s. <code>#include</code> lines are skipped; <code>t_list</code> is provided when your file uses it.</p>
-      <p><b>Built-in libc for your tests:</b> <code>malloc</code>, <code>calloc</code>, <code>free</code>, <code>write</code>, <code>printf</code>, <code>puts</code>, <code>putchar</code> and the usual string, memory and <code>ctype</code> functions.</p>
-      <p><b>Not yet:</b> <code>float</code>/<code>double</code>, <code>union</code>, <code>enum</code>, <code>switch</code>, <code>goto</code>, macros with arguments and <code>va_list</code>.</p>
+      <p><b>Supported:</b> all integer types, <code>size_t</code>, pointers, arrays, structs, <code>typedef</code>, function pointers, <code>static</code> locals, variadic functions with <code>va_list</code>/<code>va_start</code>/<code>va_arg</code>/<code>va_copy</code>/<code>va_end</code>, every operator, <code>if</code>/<code>while</code>/<code>do</code>/<code>for</code>, <code>break</code>/<code>continue</code>, string and character escapes, simple <code>#define</code>s and <code>#if</code>/<code>#ifdef</code>/<code>#ifndef</code>/<code>#else</code>/<code>#endif</code> (tests set <code>BUFFER_SIZE</code> like <code>cc -D</code>). <code>#include</code> lines are skipped; <code>t_list</code> is provided when your file uses it.</p>
+      <p><b>Built-in libc for your tests:</b> <code>malloc</code>, <code>calloc</code>, <code>free</code>, <code>write</code>, <code>read</code>, <code>open</code>, <code>close</code>, <code>printf</code>, <code>puts</code>, <code>putchar</code> and the usual string, memory and <code>ctype</code> functions. Files exist only in memory: the tests create them.</p>
+      <p><b>Not yet:</b> <code>float</code>/<code>double</code>, <code>union</code>, <code>enum</code>, <code>switch</code>, <code>goto</code> and macros with arguments.</p>
       <p><b>Limits:</b> 300,000 steps per run, 20,000 allocations, 1 MB per allocation, 64 KB of output, 400 nested calls, and the first 3,000 steps are recorded for stepping.</p>
     </section>
 
@@ -165,6 +171,8 @@
           <h3><span class="tag now">Now</span> Shipped</h3>
           <ul>
             <li>All 43 libft functions from subject v19.3, with tests, hints and step reveals</li>
+            <li>ft_printf (v12.1) and get_next_line (v14.3, with bonus tests), split into steps</li>
+            <li>Variadic functions, files and <code>read()</code>, static memory and <code>BUFFER_SIZE</code> in the visualiser</li>
             <li>Live runs, step-through memory and flow views, step animations</li>
             <li>Memory error and leak detection, malloc failure tests</li>
             <li>Prototype, allowed functions, compiler, subject and partial Norm checks</li>
@@ -181,8 +189,8 @@
         <div class="lane">
           <h3><span class="tag later">Later</span> Beyond libft</h3>
           <ul>
-            <li>Exercise packs: C Piscine (C00 to C13), <code>get_next_line</code>, <code>ft_printf</code></li>
-            <li>Language: <code>switch</code>, <code>enum</code>, <code>va_list</code>, file descriptors</li>
+            <li>Exercise packs: C Piscine (C00 to C13), ft_printf bonus flags (<code>-0.# +</code> and width)</li>
+            <li>Language: <code>switch</code>, <code>enum</code>, macros with arguments</li>
             <li>Export and import progress; works offline as an installable app</li>
             <li>Teacher mode: write your own exercises as data files</li>
             <li>Translations (French, Arabic, Spanish)</li>

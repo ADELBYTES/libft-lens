@@ -5,8 +5,9 @@
 import { parse } from "./parser.js";
 import { CATALOG, LIST_PRELUDE } from "./libft.js";
 
-const callsOf = (src) => new Set([...src.matchAll(/\b(ft_\w+)\s*\(/g)].map((m) => m[1]).filter((n) => CATALOG[n]));
-const definedIn = (src) => new Set([...src.matchAll(/^[A-Za-z_][\w \t*]*?\b(ft_\w+)\s*\([^;]*$/gm)].map((m) => m[1]));
+// any catalog function (ft_*, pf_*, gnl_*, get_next_line) that is called, or defined at the start of a line
+const callsOf = (src) => new Set([...src.matchAll(/\b([A-Za-z_]\w*)\s*\(/g)].map((m) => m[1]).filter((n) => CATALOG[n]));
+const definedIn = (src) => new Set([...src.matchAll(/^[A-Za-z_][\w \t*]*?\b([A-Za-z_]\w*)\s*\([^;]*$/gm)].map((m) => m[1]).filter((n) => CATALOG[n]));
 
 // library(name) returns { code, from } for a libft function: the student's own
 // passing version when there is one, otherwise the reference version.
@@ -32,7 +33,7 @@ export function assemble({ code, harness = null, library = null }) {
   const src = code + "\n" + libCode + "\n" + (harness ? harness.code : "");
   const needsList = /\bt_list\b/.test(src) && !/typedef\s+struct\s+s_list/.test(code);
   return {
-    src, prelude: needsList ? LIST_PRELUDE : "",
+    src, prelude: needsList ? LIST_PRELUDE : "", defines: (harness && harness.defines) || {},
     mainEnd: mainLines, libEnd: mainLines + libLines, hasHarness: !!harness,
     deps: deps.map((d) => ({ name: d.name, from: d.from })),
   };
@@ -63,7 +64,7 @@ export function labelsOf(program) {
 // Parses an assembled program. With a test driver, its main replaces any
 // main in the student's file; mains of linked functions are always dropped.
 export function compile(a) {
-  const program = parse(a.src, { prelude: a.prelude });
+  const program = parse(a.src, { prelude: a.prelude, defines: a.defines });
   tagFiles(program.items, a);
   program.items = program.items.filter((it) => !(it.k === "func" && it.name === "main" && (it.file === "lib" || (a.hasHarness && it.file === "main"))));
   return program;

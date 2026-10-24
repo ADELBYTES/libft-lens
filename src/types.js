@@ -37,6 +37,8 @@ export const BUILTIN_TYPEDEFS = {
   int64_t: { ...T.long, alias: "int64_t" },
   uint64_t: { ...T.ulong, alias: "uint64_t" },
   bool: { ...T.uchar, alias: "bool" },
+  // an opaque handle into the current call's ... arguments
+  va_list: { k: "ptr", to: T.void, size: 8, alias: "va_list", va: true },
 };
 
 export function sizeOf(t) {
@@ -74,6 +76,7 @@ export const isScalar = (t) => t.k === "int" || t.k === "ptr";
 export const isCharLike = (t) => t.k === "int" && t.size === 1;
 
 export function typeName(t, inner = "") {
+  if (t.va) return "va_list" + (inner ? " " + inner : "");
   switch (t.k) {
     case "void": case "int": return (t.alias || t.name) + (inner ? " " + inner : "");
     case "struct": return (t.alias || `struct ${t.tag || "(anon)"}`) + (inner ? " " + inner : "");

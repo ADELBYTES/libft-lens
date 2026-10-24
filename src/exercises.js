@@ -8,7 +8,9 @@
 // Blocks must hold complete statements, so the starter still compiles after
 // any subset of them is filled in. See blocks.js for how they are expanded.
 
-export const PARTS = { 1: "Part 1 · libc", 2: "Part 2 · additional", 3: "Bonus · lists" };
+import { EX_MORE, ORDERS, PACK_PARTS } from "./packs.js";
+
+export const PARTS = { 1: "Part 1 · libc", 2: "Part 2 · additional", 3: "Bonus · lists", ...PACK_PARTS };
 
 export const ORDER = [
   "ft_isalpha", "ft_isdigit", "ft_isalnum", "ft_isascii", "ft_isprint", "ft_toupper", "ft_tolower",
@@ -1207,3 +1209,13 @@ char	**ft_split(char const *s, char c)
 }`,
   },
 };
+
+Object.assign(EX, EX_MORE);
+
+// the projects, each with its own rail of exercises
+export const PACKS = {
+  libft: { title: "libft", subject: "v19.3", order: ORDER },
+  ft_printf: { title: "ft_printf", subject: "v12.1", order: ORDERS.ft_printf },
+  get_next_line: { title: "get_next_line", subject: "v14.3", order: ORDERS.get_next_line },
+};
+export const ALL = Object.values(PACKS).flatMap((p) => p.order);

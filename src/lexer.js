@@ -34,8 +34,15 @@ const BUILTIN_MACROS = {
   SIZE_MAX: "18446744073709551615UL",
   CHAR_BIT: "8",
   EOF: "(-1)",
+  STDIN_FILENO: "0",
   STDOUT_FILENO: "1",
   STDERR_FILENO: "2",
+  O_RDONLY: "0",
+  O_WRONLY: "1",
+  O_RDWR: "2",
+  O_CREAT: "64",
+  OPEN_MAX: "1024",
+  FD_SETSIZE: "1024",
 };
 
 const ESCAPES = { n: 10, t: 9, r: 13, v: 11, f: 12, a: 7, b: 8, e: 27, "\\": 92, "'": 39, '"': 34, "?": 63 };
@@ -63,11 +70,16 @@ function rawTokens(src, macros) {
   let i = 0, line = 1, lineStart = 0;
   let atLineStart = true;
   const col = () => i - lineStart + 1;
+  // #if / #ifdef / #ifndef nesting: each level knows whether it is on and whether a branch was taken
+  const conds = [];
+  const live = () => conds.every((c) => c.on);
 
   while (i < src.length) {
     const c = src[i];
     if (c === "\n") { line++; i++; lineStart = i; atLineStart = true; continue; }
     if (c === " " || c === "\t" || c === "\r" || c === "\f" || c === "\v") { i++; continue; }
+    // inside a branch that is switched off, only directives matter
+    if (!live() && !(c === "#" && atLineStart)) { while (i < src.length && src[i] !== "\n") i++; continue; }
     if (c === "/" && src[i + 1] === "/") { while (i < src.length && src[i] !== "\n") i++; continue; }
     if (c === "/" && src[i + 1] === "*") {
       const end = src.indexOf("*/", i + 2);
@@ -83,8 +95,7 @@ function rawTokens(src, macros) {
         if (src[j] === "\\" && src[j + 1] === "\n") { text += " "; j += 2; line++; lineStart = j; continue; }
         text += src[j++];
       }
-      const m = /^#\s*define\s+([A-Za-z_]\w*)(?!\()\s*(.*)$/.exec(text);
-      if (m) macros[m[1]] = m[2].replace(/\/\/.*$/, "").trim();
+      directive(text.replace(/\/\*.*?\*\/|\/\/.*$/g, "").trim(), conds, live, macros, line);
       i = j;
       continue;
     }
@@ -147,11 +158,79 @@ function rawTokens(src, macros) {
     i += op.length;
     toks.push({ t: "op", v: op, line, col: startCol, pos: start, end: i });
   }
+  if (conds.length) throw new CSyntaxError("#if, #ifdef or #ifndef is missing its #endif", line, 1);
   return toks;
 }
 
-export function tokenize(src) {
-  const macros = { ...BUILTIN_MACROS };
+function directive(text, conds, live, macros, line) {
+  const d = /^#\s*(\w*)\s*(.*)$/.exec(text);
+  const kind = d ? d[1] : "", arg = d ? d[2].trim() : "";
+  const top = conds[conds.length - 1];
+  const need = () => { if (!top) throw new CSyntaxError(`#${kind} without a matching #if`, line, 1); };
+  switch (kind) {
+    case "ifdef": case "ifndef": {
+      const parent = live();
+      const on = parent && ((kind === "ifdef") === (arg.split(/\s/)[0] in macros));
+      conds.push({ on, taken: on, parent });
+      break;
+    }
+    case "if": {
+      const parent = live();
+      const on = parent && evalIf(arg, macros, line);
+      conds.push({ on, taken: on, parent });
+      break;
+    }
+    case "elif":
+      need();
+      if (top.taken) top.on = false;
+      else { top.on = top.parent && evalIf(arg, macros, line); top.taken = top.on; }
+      break;
+    case "else": need(); top.on = top.parent && !top.taken; top.taken = true; break;
+    case "endif": need(); conds.pop(); break;
+    case "define": {
+      if (!live()) break;
+      const m = /^([A-Za-z_]\w*)(?!\()\s*(.*)$/.exec(arg);
+      if (m) macros[m[1]] = m[2].trim();
+      break;
+    }
+    case "undef": if (live()) delete macros[arg.split(/\s/)[0]]; break;
+    case "error": if (live()) throw new CSyntaxError(`#error ${arg}`, line, 1); break;
+    default: break; // #include, #pragma: nothing to do here
+  }
+}
+
+// #if expressions: integers, defined(X), macros, ! && || comparisons and arithmetic
+function evalIf(expr, macros, line) {
+  const src = expr.replace(/defined\s*\(\s*(\w+)\s*\)|defined\s+(\w+)/g, (_, a, b) => ((a || b) in macros ? "1" : "0"))
+    .replace(/[A-Za-z_]\w*/g, (id) => (id in macros && /^\(?-?\d+[uUlL]*\)?$/.test(macros[id]) ? macros[id].replace(/[()uUlL]/g, "") : "0"));
+  const toks = src.match(/\d+|&&|\|\||==|!=|<=|>=|[-+*/%<>!()]/g) || [];
+  let p = 0;
+  const peek = () => toks[p];
+  const bin = (next, ops) => () => {
+    let v = next();
+    while (ops[peek()]) { const op = toks[p++]; v = ops[op](v, next()); }
+    return v;
+  };
+  const unary = () => {
+    const t = toks[p++];
+    if (t === "!") return unary() ? 0 : 1;
+    if (t === "-") return -unary();
+    if (t === "(") { const v = or(); p++; return v; }
+    if (t === undefined || !/^\d+$/.test(t)) throw new CSyntaxError(`cannot evaluate #if ${expr}`, line, 1);
+    return Number(t);
+  };
+  const mul = bin(unary, { "*": (a, b) => a * b, "/": (a, b) => (b ? Math.trunc(a / b) : 0), "%": (a, b) => (b ? a % b : 0) });
+  const add = bin(mul, { "+": (a, b) => a + b, "-": (a, b) => a - b });
+  const rel = bin(add, { "<": (a, b) => +(a < b), ">": (a, b) => +(a > b), "<=": (a, b) => +(a <= b), ">=": (a, b) => +(a >= b) });
+  const eq = bin(rel, { "==": (a, b) => +(a === b), "!=": (a, b) => +(a !== b) });
+  const and = bin(eq, { "&&": (a, b) => +(a && b) });
+  const or = bin(and, { "||": (a, b) => +(a || b) });
+  return or() !== 0;
+}
+
+// `defines` plays the role of cc -D NAME=value
+export function tokenize(src, defines = {}) {
+  const macros = { ...BUILTIN_MACROS, ...defines };
   const toks = rawTokens(src, macros);
   // expand object-like macros, guarding against self-reference
   const cache = {};

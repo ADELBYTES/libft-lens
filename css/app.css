@@ -316,3 +316,28 @@ code, .mono, .hl, #code, .gutter, .proto, .code-ro, .out, .step pre, .flow, .mem
 .toplinks a { color: var(--muted); text-decoration: none; }
 .toplinks a:hover, .toplinks a:focus-visible { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
 #diag .issues { margin-top: 8px; }
+
+/* ---------- projects: ft_printf and get_next_line ---------- */
+.packs { display: flex; gap: 2px; background: var(--soft); border-radius: 9px; padding: 3px; flex: none; margin-right: 8px; }
+.packs button { border: 0; background: transparent; border-radius: 7px; padding: 4px 10px; font-family: var(--font-ui); font-size: 13px; font-weight: 700; color: var(--muted); }
+.packs button[aria-selected="true"] { background: var(--panel); color: var(--ink); box-shadow: 0 1px 2px rgb(0 0 0 / .12); }
+.pk-count { font-weight: 400; font-size: 11px; color: var(--muted); margin-left: 2px; font-variant-numeric: tabular-nums; }
+.frame.static-f { border-style: dashed; border-color: var(--ptr2); }
+.frame.static-f .frame-h { color: var(--ptr2); }
+.var.varargs { grid-template-columns: auto auto minmax(0, 1fr); }
+.va-items { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
+.va-item { font-family: var(--font-code); font-size: 12px; border: 1px solid var(--line); border-radius: 5px; padding: 0 6px; background: var(--code-bg); }
+.va-item.next { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.va-item.used { opacity: .45; text-decoration: line-through; }
+.va-next { font-size: 12px; color: var(--accent); font-weight: 600; }
+.files { display: grid; gap: 12px; margin-bottom: 18px; }
+.fcell { width: calc(var(--cw) * .8); display: grid; justify-items: center; gap: 2px; }
+.fcell .box { width: 100%; height: 30px; display: flex; align-items: center; justify-content: center; border: 1.5px solid var(--line); border-radius: 4px; font-family: var(--font-code); font-size: 13px; background: var(--panel); }
+.fcell .tag { font-family: var(--font-code); font-size: 10px; color: var(--accent); font-weight: 600; min-height: 14px; }
+.fcell.used .box { opacity: .35; }
+.fcell.nl .box { color: var(--nul-ink); font-size: 11px; }
+.fcell.cursor .box { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.fcell.eof .box { font-size: 9px; color: var(--muted); border-style: dashed; }
+.tchip.bonus { border-style: dashed; }
+.bonus-tag { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; background: var(--soft); color: var(--muted); border-radius: 4px; padding: 0 5px; margin-left: 4px; }
+.fname { font-family: var(--font-code); font-size: 12px; color: var(--muted); }
