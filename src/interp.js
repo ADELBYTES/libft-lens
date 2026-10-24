@@ -329,7 +329,12 @@ function makeBuiltins(I) {
       return intv(ok ? 1 : 0);
     }),
     // the n-th allocation from now returns NULL (1 = the very next one)
-    __fail_malloc_after: B(T.void, [T.int], ([n]) => { I.failAfter = Number(n.v); return { t: T.void }; }),
+    __fail_malloc_after: B(T.void, [T.int], ([n]) => { I.failAfter = Number(n.v); I.failHit = false; return { t: T.void }; }),
+    // a failure test only counts when the function really reached the failing malloc
+    __expect_fail_hit: B(T.int, [P.cc], ([what]) => {
+      I.expect(!!I.failHit, `${I.cs(what.v)}: the simulated malloc failure was never reached, so the function did not allocate as expected`);
+      return intv(I.failHit ? 1 : 0);
+    }),
     __expect_out: B(T.int, [P.cc, P.cc], ([exp, what]) => {
       const e = I.cs(exp.v), ok = I.stdout === e;
       I.expect(ok, `${I.cs(what.v)}: expected output ${JSON.stringify(e)}, got ${JSON.stringify(I.stdout)}`);
@@ -417,6 +422,7 @@ class Interp {
   failNow() {
     if (!(this.failAfter > 0) || --this.failAfter > 0) return false;
     this.record({ k: "note", msg: "malloc returned NULL here: the test simulates running out of memory." });
+    this.failHit = true;
     return true;
   }
   expect(ok, msg) { this.expects.push({ ok, msg, line: this.line }); this.record({ k: "expect", ok, msg }); }
@@ -600,6 +606,7 @@ class Interp {
       if (f.name === "main") ret = intv(0);
       else { this.warn(`${f.name}() reached its closing } without a return. The caller gets a garbage value.`); ret = { t: rt, v: rt.k === "ptr" ? 0xdeadbeef : wrap(0xbebebeben, rt), garbage: true }; }
     } else ret = { t: T.void };
+    if (ret.uninit) this.warn(`${f.name}() returns a variable that was never given a value. The caller gets garbage.`);
     this.line = f.endLine;
     this.step("return", f.exitId, f.endLine, f.file, { retVal: ret.t.k === "void" ? null : this.valueText(ret), retFn: f.name });
     this.frames.pop();
