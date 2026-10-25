@@ -8,9 +8,10 @@
 </p>
 
 <p align="center">
-  <a href="media/libft-lens-intro.mp4">Watch the 30-second intro</a> ·
-  <a href="docs.html">Docs</a> ·
-  <a href="docs.html#roadmap">Roadmap</a>
+  <a href="https://adelbytes.github.io/libft-lens/"><b>Try it live</b></a> ·
+  <a href="https://adelbytes.github.io/libft-lens/media/libft-lens-intro.mp4">Watch the 30-second intro</a> ·
+  <a href="https://adelbytes.github.io/libft-lens/docs.html">Docs</a> ·
+  <a href="https://adelbytes.github.io/libft-lens/docs.html#roadmap">Roadmap</a>
 </p>
 
 ---
@@ -37,7 +38,9 @@ libft Lens goes the other way. You write every function yourself. The app runs y
 
 ## Try it
 
-No build step and no dependencies: clone and serve the folder.
+Open **[https://adelbytes.github.io/libft-lens/](https://adelbytes.github.io/libft-lens/)**: nothing to install, no account, and your code stays in your browser.
+
+To run it locally there is no build step and no dependency: clone and serve the folder.
 
 ```bash
 git clone https://github.com/ADELBYTES/libft-lens.git
@@ -46,6 +49,15 @@ npm start
 ```
 
 Then open http://localhost:8080. (`npm start` runs a tiny Python static server with caching off; any static server works.)
+
+## Engineering highlights
+
+- **A C interpreter written from scratch** in plain JavaScript (lexer, preprocessor, parser and tracing interpreter, about 2,000 lines). It models a 64-bit process byte by byte, which is what lets it catch memory bugs at the exact line and draw every step.
+- **No dependencies and no build step.** About 7,500 lines of hand-written HTML, CSS and JavaScript, served as static files.
+- **Content checked by its own tests.** 66 automated tests. For all 55 exercises they prove that the reference solution passes every test, compiles cleanly, follows the Norm and the subject's rules, and does not leak when `malloc` fails, and that every starter fails until the student writes code.
+- **Responsive under load.** Student code runs in a Web Worker with step, output and allocation limits and a watchdog, so an infinite loop never freezes the page.
+- **Animation without a framework.** Memory changes animate with a measure-then-animate (FLIP) approach on stable keys; pointer arrows interpolate between old and new targets.
+- **Secure by default.** Strict Content-Security-Policy, no outgoing connections, everything escaped, and progress rebuilt from code on every load so it cannot be faked.
 
 ## How it works
 
@@ -103,3 +115,7 @@ Next is an AI coach: a chat box beside your code, powered by a model running on 
 ## Contributing
 
 Issues and pull requests are welcome. To add or change an exercise, edit `src/exercises.js` (the reference solution with its hidden steps) and `src/libft.js` (its test drivers), then run `npm test`. It refuses any exercise whose reference fails a test, breaks the Norm or leaks.
+
+---
+
+Made by [ADELBYTES](https://github.com/ADELBYTES) for 42 students who want to understand their C, not just pass it.

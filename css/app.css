@@ -341,3 +341,4 @@ code, .mono, .hl, #code, .gutter, .proto, .code-ro, .out, .step pre, .flow, .mem
 .tchip.bonus { border-style: dashed; }
 .bonus-tag { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; background: var(--soft); color: var(--muted); border-radius: 4px; padding: 0 5px; margin-left: 4px; }
 .fname { font-family: var(--font-code); font-size: 12px; color: var(--muted); }
+.foot a { color: var(--accent); }
