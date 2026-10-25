@@ -1,5 +1,8 @@
 <p align="center">
-  <img src="media/poster.png" alt="libft Lens: Learn C by watching it run" width="520">
+  <a href="https://adelbytes.github.io/libft-lens/media/libft-lens-intro.mp4">
+    <img src="media/preview.gif" alt="libft Lens in motion: a pointer walking a string, a heap overflow caught, ft_printf's va_arg, get_next_line's static stash, and the 55 exercises" width="480">
+  </a>
+  <br><sub>▶ Click to watch the full 40-second video</sub>
 </p>
 
 <p align="center">
