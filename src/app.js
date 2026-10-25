@@ -1155,7 +1155,8 @@ document.addEventListener("click", (e) => {
   if (tB) { S.selTest[S.exId] = +tB.dataset.test; S.follow = false; renderTests(); runNow(); return; }
   const gB = e.target.closest("[data-goto]");
   if (gB) { stop(); go(+gB.dataset.goto); return; }
-  const mB = e.target.closest("[data-mview]");
+  // only the view buttons: <body> carries data-mview too, as the current view
+  const mB = e.target.closest("button[data-mview]");
   if (mB) { setMview(mB.dataset.mview); return; }
   const rv = e.target.closest("[data-reveal]");
   if (rv) {
@@ -1247,5 +1248,12 @@ function verifyProgress() {
 /* ---------------- boot ---------------- */
 
 document.body.dataset.mview = "code";
+// a one-time pointer to the tour for first visits
+if (!store.get("tourSeen", false)) {
+  $("tourbar").hidden = false;
+  const seen = () => { store.set("tourSeen", true); $("tourbar").hidden = true; };
+  $("tourGo").addEventListener("click", seen);
+  $("tourNo").addEventListener("click", seen);
+}
 if (S.mode === "ex") openExercise(S.exId); else openFree();
 setTimeout(verifyProgress, 1200);

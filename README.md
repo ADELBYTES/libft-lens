@@ -9,6 +9,7 @@
 
 <p align="center">
   <a href="https://adelbytes.github.io/libft-lens/"><b>Try it live</b></a> ·
+  <a href="https://adelbytes.github.io/libft-lens/docs.html#tour">2-minute tour</a> ·
   <a href="https://adelbytes.github.io/libft-lens/media/libft-lens-intro.mp4">Watch the 30-second intro</a> ·
   <a href="https://adelbytes.github.io/libft-lens/docs.html">Docs</a> ·
   <a href="https://adelbytes.github.io/libft-lens/docs.html#roadmap">Roadmap</a>
@@ -81,6 +82,7 @@ The interpreter models a 64-bit Mac or Linux process in one flat byte array: a `
 | `src/libft.js`, `src/exercises.js`, `src/packs.js`, `src/blocks.js` | Subject catalogs, test drivers, hints, reference solutions with hidden steps (libft, ft_printf, get_next_line) |
 | `src/flow.js`, `src/app.js` | Flowchart graph; the UI |
 | `demo/` | The intro film as a canvas animation (`npm run record` saves it as a video) |
+| `tools/shots.mjs` | Regenerates the tour screenshots with headless Chrome, light and dark, and smoke-tests the step reveal on the way |
 
 ## Accuracy and limits
 

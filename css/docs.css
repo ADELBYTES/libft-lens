@@ -41,3 +41,15 @@ kbd { font-family: var(--font-code); font-size: 13px; border: 1px solid var(--li
   .toc { position: static; display: flex; flex-wrap: wrap; gap: 4px; }
   .doc h1 { font-size: 28px; }
 }
+
+/* the first-time tour: numbered steps, each with a screenshot */
+.tour { list-style: none; padding-left: 0 !important; counter-reset: tour; display: grid; gap: 26px !important; }
+.tour > li { counter-increment: tour; position: relative; padding-left: 44px; }
+.tour > li::before { content: counter(tour); position: absolute; left: 0; top: 0; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--accent); color: #fff; font-weight: 700; font-size: 15px; }
+.tour h3 { margin: 3px 0 4px; font-size: 17px; }
+.tour p { margin: 0 0 10px; }
+.tour figure { margin: 0; }
+.tour img { display: block; width: 100%; max-width: 100%; height: auto; border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 8px 24px rgb(0 0 0 / .12); background: var(--panel); }
+.tour > li:first-child img { width: 100%; }
+@media (max-width: 820px) { .tour > li { padding-left: 0; } .tour > li::before { position: static; margin-bottom: 6px; } }

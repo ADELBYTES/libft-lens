@@ -402,3 +402,6 @@ code, .mono, .hl, #code, .gutter, .proto, .code-ro, .out, .step pre, .flow, .mem
   .only-mobile { display: inline; margin-top: 6px; }
   .rail-search { flex-basis: 100%; }
 }
+.tourbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-bottom: 12px; padding: 10px 14px; border: 1px solid var(--accent); background: var(--accent-soft); border-radius: 10px; font-size: 14px; }
+.tourbar span { flex: 1 1 260px; }
+.tourbar .btn { text-decoration: none; }

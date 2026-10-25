@@ -25,6 +25,7 @@
 
 <div class="doc-layout">
   <nav class="toc" aria-label="On this page">
+    <a href="#tour">2-minute tour</a>
     <a href="#start">Quick start</a>
     <a href="#screen">The screen</a>
     <a href="#memory">Reading memory</a>
@@ -41,6 +42,44 @@
   <main class="doc">
     <h1>Learn C by watching it run</h1>
     <p class="lede">libft Lens is a practice space for the 42 projects libft, ft_printf and get_next_line. You write each function yourself; the app runs it as you type and shows what it does to memory, line by line. When you are stuck it gives you the next idea, not the answer.</p>
+
+    <section id="tour">
+      <h2>First time here? A 2-minute tour</h2>
+      <p>One exercise from start to finish, with <code>ft_strlen</code>: how to find it, write it, see why it fails, and fix it.</p>
+      <ol class="tour">
+        <li>
+          <h3>Pick a project and a function</h3>
+          <p>Choose <b>libft</b>, <b>ft_printf</b> or <b>get_next_line</b>, then a function on the rail. libft runs from easy to hard, so <code>ft_isalpha</code> is a good first step; this tour uses <code>ft_strlen</code>. Type in the search box to jump to any function.</p>
+          <figure><picture><source srcset="media/tour/1-pick-dark.png" media="(prefers-color-scheme: dark)"><img src="media/tour/1-pick-light.png" alt="The top of the app: Exercises and Free code, the projects libft, ft_printf and get_next_line, a search box, and the exercise rail with ft_strlen selected" width="760" height="102" loading="lazy"></picture></figure>
+        </li>
+        <li>
+          <h3>Read what is asked</h3>
+          <p>The card says what the function must do in plain words, shows the exact prototype from the subject, and lists what you may call. The checks underneath update as you type: prototype, allowed functions, compiler problems, subject rules and the Norm.</p>
+          <figure><picture><source srcset="media/tour/2-card-dark.png" media="(prefers-color-scheme: dark)"><img src="media/tour/2-card-light.png" alt="The exercise card for ft_strlen: its goal, the prototype size_t ft_strlen(const char *s), allowed functions and green checks" width="590" height="199" loading="lazy"></picture></figure>
+        </li>
+        <li>
+          <h3>Write it yourself, one step at a time</h3>
+          <p>Your file starts with the plan as <code>/* ▢ … */</code> placeholders. Replace them with your own code. The current step sits above the editor; if you are stuck, ask for it in small doses: an explanation, then the code with blanks, and only at the end the code itself.</p>
+          <figure><picture><source srcset="media/tour/3-write-dark.png" media="(prefers-color-scheme: dark)"><img src="media/tour/3-write-light.png" alt="The editor with the first step written. Above it, the next step, return the count, with its plain-language explanation and a Show it with blanks button" width="560" height="327" loading="lazy"></picture></figure>
+        </li>
+        <li>
+          <h3>Let the tests tell you what is wrong</h3>
+          <p>Half a second after you stop typing, your code runs against every test. A failing test leads with one plain sentence; the raw output is under Details. Click a test to watch that one run.</p>
+          <figure><picture><source srcset="media/tour/4-tests-dark.png" media="(prefers-color-scheme: dark)"><img src="media/tour/4-tests-light.png" alt="The Tests panel: empty string and short string fail, with the sentence ft_strlen("hi!"): expected 3, got 4" width="676" height="155" loading="lazy"></picture></figure>
+        </li>
+        <li>
+          <h3>Step through and watch the memory</h3>
+          <p>Playback opens on the first call that fails. Press <b>Next</b> or <b>Play</b>, or click a line of your code to jump to that moment. Arrows are pointers, the highlighted cell is the one your code just read, and <code>'\0'</code> marks the end of the string. Here you can see why the answer is 4: the count goes one past the last character.</p>
+          <figure><picture><source srcset="media/tour/5-trace-dark.png" media="(prefers-color-scheme: dark)"><img src="media/tour/5-trace-light.png" alt="The visualiser on call 1 of 1, ft_strlen("hi!"), which got 4 instead of 3. The pointer s has an arrow to the string's first cell, i is 1, and the cell s[i] is highlighted" width="674" height="611" loading="lazy"></picture></figure>
+        </li>
+        <li>
+          <h3>Fix, then move on</h3>
+          <p>Fix the code and the tests rerun on their own. When the tests pass <i>and</i> the checks are clean, the exercise is complete: the rail shows a check mark and <b>Next</b> takes you to the following function.</p>
+          <figure><picture><source srcset="media/tour/6-done-dark.png" media="(prefers-color-scheme: dark)"><img src="media/tour/6-done-light.png" alt="The Tests panel with all three tests passing and the banner Exercise complete, with a Next: ft_memset button" width="676" height="167" loading="lazy"></picture></figure>
+        </li>
+      </ol>
+      <p><a class="btn" href="index.html">Open the app and try it</a></p>
+    </section>
 
     <section id="start">
       <h2>Quick start</h2>
