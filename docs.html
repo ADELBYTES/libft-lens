@@ -126,7 +126,7 @@
         <li><b>Open files</b>: each file your code opened, byte by byte. What <code>read()</code> has already consumed is dimmed and <code>next</code> marks the next byte, up to <code>EOF</code>.</li>
         <li><b>The <code>...</code> row</b> in a variadic function's frame: the extra arguments of this call. Used ones are crossed out and the one the next <code>va_arg</code> will take is highlighted; a <code>va_list</code> variable shows which argument comes next.</li>
       </ul>
-      <p><b>Expert view</b> adds addresses, element types and byte details. The default view hides them so the shapes are easier to read.</p>
+      <p>Pointers show their address next to the arrow, and each block header gives its element type, its number of elements and its start address: the same numbers you would see in a debugger.</p>
     </section>
 
     <section id="stuck">

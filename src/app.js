@@ -34,7 +34,6 @@ const S = {
   hintLv: {},
   selTest: {},
   testRes: {},
-  expert: store.get("expert", false),
   animOn: store.get("anim", true),
   tab: "mem",
   cursorLine: 1,
@@ -379,7 +378,6 @@ function where(file, line, fn) {
   if (file === "lib") return `inside the linked ${fn || "library"}()`;
   return `line ${line}`;
 }
-const valText = (t) => (!S.expert && /^0x/.test(t || "") ? "a new address (follow the arrow)" : t);
 
 function renderNarr() {
   const s = snap();
@@ -397,11 +395,11 @@ function renderNarr() {
   for (const ev of s.events) {
     if (ev.k === "read") did.push(ev.count < 0 ? `<code>read(${ev.fd}, …)</code> failed: fd ${ev.fd} is not open, so it returned -1.` : ev.count === 0 ? `<code>read(${ev.fd}, …)</code> returned 0: the end of the file.` : `<code>read(${ev.fd}, …)</code> copied <b>${ev.count}</b> byte${ev.count === 1 ? "" : "s"} into the buffer${ev.count < ev.want ? ` (asked for ${ev.want})` : ""}.`);
     else if (ev.k === "open") did.push(`Opened <code>${esc(ev.name)}</code> as fd <b>${ev.fd}</b>.`);
-    else if (ev.k === "va") did.push(ev.what === "start" ? `<code>va_start</code>: ${ev.total} extra argument${ev.total === 1 ? " is" : "s are"} ready to be read.` : ev.what === "arg" ? `<code>${esc(ev.label)}</code> took extra argument <b>${ev.index} of ${ev.total}</b>: <b>${esc(valText(ev.text))}</b>.` : "<code>va_end</code>: finished with the extra arguments.");
+    else if (ev.k === "va") did.push(ev.what === "start" ? `<code>va_start</code>: ${ev.total} extra argument${ev.total === 1 ? " is" : "s are"} ready to be read.` : ev.what === "arg" ? `<code>${esc(ev.label)}</code> took extra argument <b>${ev.index} of ${ev.total}</b>: <b>${esc(ev.text)}</b>.` : "<code>va_end</code>: finished with the extra arguments.");
     else if (ev.bad) did.push(`Tried to ${ev.k === "w" ? "write" : "read"} <code>${esc(ev.label || "memory")}</code>, outside any valid block.`);
     else if (ev.k === "cond") did.push(`<code>${esc(ev.label)}</code> was <b>${ev.result ? "true" : "false"}</b>${ev.loop ? (ev.result ? ", so the loop body runs" : ", so the loop ends") : ev.result ? ", so the if branch runs" : ", so the if branch is skipped"}.`);
-    else if (ev.k === "w" && ev.label && ev.text != null && !/^argument/.test(ev.label)) did.push(`Wrote <code>${esc(ev.label)}</code> = <b>${esc(valText(ev.text) || "")}</b>.`);
-    else if (ev.k === "r" && ev.label && shown.has(ev.block) && /[[*>]/.test(ev.label) && reads < 3 && ev.text) { reads++; did.push(`Read <code>${esc(ev.label)}</code> → <b>${esc(valText(ev.text))}</b>.`); }
+    else if (ev.k === "w" && ev.label && ev.text != null && !/^argument/.test(ev.label)) did.push(`Wrote <code>${esc(ev.label)}</code> = <b>${esc(ev.text || "")}</b>.`);
+    else if (ev.k === "r" && ev.label && shown.has(ev.block) && /[[*>]/.test(ev.label) && reads < 3 && ev.text) { reads++; did.push(`Read <code>${esc(ev.label)}</code> → <b>${esc(ev.text)}</b>.`); }
     else if (ev.k === "call" && !ev.builtin && S.trace.program.items.some((f) => f.k === "func" && f.name === ev.name && f.file === "lib")) did.push(`Called the linked <code>${esc(ev.name)}()</code>${linkedFrom(ev.name)}.`);
     else if (ev.k === "free") did.push("Freed a heap block.");
     else if (ev.k === "note") did.push(esc(ev.msg));
@@ -413,7 +411,7 @@ function renderNarr() {
   const label = S.trace.labels.get(s.node);
   switch (s.kind) {
     case "enter": head = `Called <code>${esc(s.fn)}()</code>. A new stack frame opens and each parameter gets a copy of its argument.`; break;
-    case "return": head = s.retVal != null ? `<code>${esc(s.retFn)}()</code> returns <b>${esc(valText(s.retVal))}</b>. Its frame disappears on the next step.` : `<code>${esc(s.retFn)}()</code> is finished. Its frame disappears on the next step.`; break;
+    case "return": head = s.retVal != null ? `<code>${esc(s.retFn)}()</code> returns <b>${esc(s.retVal)}</b>. Its frame disappears on the next step.` : `<code>${esc(s.retFn)}()</code> is finished. Its frame disappears on the next step.`; break;
     case "end":
       head = `Finished.`;
       if (s.leaks && s.leaks.length) banners.push(`<div class="banner error">Memory leak: ${s.leaks.map((l) => `${l.size} bytes from ${where(lineFile(l.line), l.line)}`).join(", ")} never freed.</div>`);
@@ -483,7 +481,7 @@ function renderMemory(anim = false) {
     if (c.target && c.target.null) return "NULL";
     if (c.target && c.target.wild) return `${esc(c.text)} (wild)`;
     if (c.target && c.target.va) { const va = c.target.va; return va.ended ? '<span class="unk">ended</span>' : `<span class="va-next">next: ${va.next + 1} of ${va.total}</span>`; }
-    return S.expert ? `<span class="unk">${esc(c.text)}</span>` : "";
+    return `<span class="unk">${esc(c.text)}</span>`;
   };
   const topFrame = s.frames[s.frames.length - 1];
 
@@ -499,10 +497,10 @@ function renderMemory(anim = false) {
     else if (v.kind === "struct") val = `<span class="unk">struct</span>`;
     else if (v.kind === "varargs") {
       // the ... arguments of this call, the next one va_arg will take highlighted
-      const items = v.items.map((t, k) => `<span class="va-item${k === v.next ? " next" : v.next != null && k < v.next ? " used" : ""}">${esc(/^0x/.test(t) && !S.expert ? "ptr" : t)}</span>`).join("");
+      const items = v.items.map((t, k) => `<span class="va-item${k === v.next ? " next" : v.next != null && k < v.next ? " used" : ""}">${esc(t)}</span>`).join("");
       return `<div class="var varargs"><span class="vn">...</span><span class="vt">${esc(v.type)}</span><span class="va-items">${items || '<span class="unk">none</span>'}</span></div>`;
     }
-    else val = v.init ? esc(v.kind === "char" && S.expert ? `${v.num} '${v.text}'` : v.text) : '<span class="unk">?</span>';
+    else val = v.init ? esc(v.kind === "char" ? `${v.num} '${v.text}'` : v.text) : '<span class="unk">?</span>';
     const changed = blockId != null && writtenBlocks.has(blockId);
     const nullCls = v.kind === "ptr" && v.target && v.target.null ? " null" : "";
     let h = `<div class="var${sub ? " sub" : ""}"><span class="vn">${esc(v.name)}</span><span class="vt" title="${esc(v.type || "")}">${esc(v.type || "")}</span><span class="vv${changed ? " changed" : ""}${nullCls}" data-vkey="${esc(key)}" ${blockId != null ? `data-varblock="${blockId}"` : ""}>${val}</span></div>`;
@@ -548,9 +546,9 @@ function renderMemory(anim = false) {
   const pointedAt = new Set(arrows.map((a) => a.target.block));
   for (const b of [...s.blocks].sort((x, y) => order[x.kind] - order[y.kind] || x.addr - y.addr)) {
     if (!b.alive && !freedNow.has(b.addr) && !pointedAt.has(b.id)) continue;
-    const where = b.kind === "heap" ? `malloc'd${S.expert ? ` on line ${b.line}` : ""}` : b.kind === "rodata" ? "string literal" : b.owner ? `in ${b.owner}()` : "global";
+    const where = b.kind === "heap" ? `malloc'd on line ${b.line}` : b.kind === "rodata" ? "string literal" : b.owner ? `in ${b.owner}()` : "global";
     const region = !b.alive ? '<span class="region freed">freed</span>' : b.lost ? '<span class="region leak">leaked</span>' : `<span class="region ${b.kind}">${b.kind === "rodata" ? "read-only" : b.kind === "global" ? "static" : b.kind}</span>`;
-    const detail = S.expert ? `${where} · ${b.count} × ${esc(b.elem)} · 0x${b.addr.toString(16)}` : `${where} · ${b.count} ${b.count === 1 ? "cell" : "cells"}`;
+    const detail = `${where} · ${b.count} × ${esc(b.elem)} · 0x${b.addr.toString(16)}`;
     let cells = "";
     const pastEndTargets = arrows.some((a) => a.target.block === b.id && a.target.pastEnd);
     const n = Math.max(b.cells.length, (ghost.get(b.id) ?? -1) + 1);
@@ -1139,8 +1137,6 @@ $("modeEx").onclick = () => openExercise(S.exId);
 $("modeFree").onclick = openFree;
 $("anim").checked = S.animOn;
 $("anim").onchange = (e) => { S.animOn = e.target.checked; store.set("anim", S.animOn); };
-$("expert").checked = S.expert;
-$("expert").onchange = (e) => { S.expert = e.target.checked; store.set("expert", S.expert); renderStep(false); };
 $("tabMem").onclick = () => { S.tab = "mem"; $("tabMem").setAttribute("aria-selected", true); $("tabFlow").setAttribute("aria-selected", false); $("memView").hidden = false; $("flowView").hidden = true; renderMemory(); };
 $("tabFlow").onclick = () => { S.tab = "flow"; $("tabFlow").setAttribute("aria-selected", true); $("tabMem").setAttribute("aria-selected", false); $("flowView").hidden = false; $("memView").hidden = true; renderFlow(); };
 

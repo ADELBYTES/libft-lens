@@ -476,8 +476,9 @@
     ctx.restore();
     words(t, 28.1, [{ text: "libft" }, { text: "Lens", grad: true }], 600, 112, { gap: 0.18 });
     caption(t, 28.7, 99, "Learn C by watching it run.", 690, { size: 44, color: C.muted, weight: 400 });
-    caption(t, 29.3, 99, "Free  ·  Runs in your browser", 880, { size: 30, color: C.ink });
-    caption(t, 29.5, 99, "github.com/ADELBYTES/libft-lens", 930, { size: 26, color: C.accent, font: MONO, weight: 600 });
+    caption(t, 29.3, 99, "Free  ·  Runs in your browser", 860, { size: 30, color: C.ink });
+    caption(t, 29.5, 99, "adelbytes.github.io/libft-lens", 912, { size: 30, color: C.accent, font: MONO, weight: 600 });
+    caption(t, 29.8, 99, "Open source on GitHub", 962, { size: 22, color: C.muted, weight: 400 });
   }
 
   function render(t) {
