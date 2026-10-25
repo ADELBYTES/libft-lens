@@ -4,7 +4,9 @@
   "use strict";
   const cv = document.getElementById("stage");
   const ctx = cv.getContext("2d");
-  const W = 1080, H = 1080, DURATION = 31.5;
+  const W = 1080, H = 1080;
+  // the closing scenes start this much later, after the ft_printf and get_next_line scenes
+  const SHIFT = 10.8, DURATION = 31.5 + SHIFT;
   const C = {
     bg: "#050608", ink: "#eef1f7", muted: "#8b93a7", dim: "#323a4a", card: "#0d1219", line: "#222b3b",
     accent: "#7199ff", violet: "#b68ef2", teal: "#3cc4b8", orange: "#f2a055", red: "#ff6f6f", green: "#63c784", nul: "#c5abff",
@@ -415,38 +417,207 @@
     "putendl_fd", "putnbr_fd", "substr", "strjoin", "strtrim", "strmapi", "striteri", "itoa", "split", "lstnew", "lstadd_front", "lstsize",
     "lstlast", "lstadd_back", "lstdelone", "lstclear", "lstiter", "lstmap"];
 
+  const PF = ["putchar", "putstr", "putnbr", "putnbr_base", "putptr", "ft_printf"];
+  const GNL = ["strlen", "strchr", "strjoin", "get_line", "rest", "get_next_line"];
+
+  function chip(x, y, w, h, name, A, a, g) {
+    ctx.save();
+    ctx.globalAlpha = A * a;
+    ctx.translate(x + w / 2, y + h / 2 + (1 - a) * 18);
+    const sc = g > 0 ? 1 + 0.08 * Math.sin(g * Math.PI) : 1;
+    ctx.scale(sc, sc);
+    rr(-w / 2, -h / 2, w, h, 12);
+    ctx.fillStyle = g > 0 ? `rgba(99,199,132,${0.16 * g})` : C.card; ctx.fill();
+    ctx.strokeStyle = g > 0 ? C.green : C.line; ctx.lineWidth = 2; ctx.stroke();
+    ctx.font = `600 ${name.length > 11 ? 12 : name.length > 10 ? 14 : name.length > 8 ? 16 : 17}px ${MONO}`;
+    ctx.fillStyle = g > 0.5 ? C.ink : C.muted; ctx.textAlign = "center";
+    ctx.fillText(name, g > 0 ? 8 : 0, 1);
+    if (g > 0) { ctx.globalAlpha = A * a * g; ctx.fillStyle = C.green; ctx.font = `700 15px ${DISPLAY}`; ctx.fillText("✓", -w / 2 + 13, 1); }
+    ctx.restore();
+  }
+
+  // all three projects light up in one wave (times are relative to 23.3; render() shifts them)
   function sceneExercises(t) {
     const A = window_(t, 23.3, 27.5, 0.4, 0.45);
     if (A <= 0) return;
-    ctx.save();
-    ctx.globalAlpha = A;
-    const cols = 7, cw = 134, ch = 54, gx = 10, gy = 12, y0 = 170;
+    const cols = 7, cw = 134, ch = 46, gx = 10, gy = 10, y0 = 112;
     const x0 = (W - (cols * cw + (cols - 1) * gx)) / 2;
+    const label = (text, x, y, a) => { ctx.save(); ctx.globalAlpha = A * a; ctx.font = `700 22px ${DISPLAY}`; ctx.fillStyle = C.muted; ctx.textAlign = "left"; ctx.fillText(text, x, y); ctx.restore(); };
+    label("libft", x0, y0 - 26, outExpo(prog(t, 23.35, 23.8)));
     NAMES.forEach((n, i) => {
       const row = Math.floor(i / cols), col = i % cols;
       const lastRow = row === Math.floor((NAMES.length - 1) / cols);
       const inRow = lastRow ? NAMES.length - row * cols : cols;
       const rx = (W - (inRow * cw + (inRow - 1) * gx)) / 2;
-      const x = (lastRow ? rx : x0) + col * (cw + gx), y = y0 + row * (ch + gy);
-      const a = outExpo(prog(t, 23.35 + i * 0.012, 23.8 + i * 0.012));
       const tg = 24.2 + (row + col) * 0.085;
-      const g = prog(t, tg, tg + 0.3);
+      chip((lastRow ? rx : x0) + col * (cw + gx), y0 + row * (ch + gy), cw, ch, n, A, outExpo(prog(t, 23.35 + i * 0.012, 23.8 + i * 0.012)), prog(t, tg, tg + 0.3));
+    });
+    [["ft_printf", PF, 548], ["get_next_line", GNL, 610]].forEach(([title, names, y], r) => {
+      const a = outExpo(prog(t, 23.9 + r * 0.1, 24.4 + r * 0.1));
+      label(title, x0, y + ch / 2, a);
+      names.forEach((n, col) => {
+        const tg = 24.2 + (7 + r + col) * 0.085;
+        chip(x0 + 172 + col * 139, y, 133, ch, n, A, outExpo(prog(t, 23.95 + r * 0.1 + col * 0.02, 24.5 + r * 0.1 + col * 0.02)), prog(t, tg, tg + 0.3));
+      });
+    });
+    caption(t, 23.7, 27.5, "libft · ft_printf · get_next_line", 750, { size: 50 });
+    caption(t, 24.7, 27.5, "55 exercises. Hints, never answers.", 822, { size: 36, color: C.muted, weight: 400 });
+  }
+
+  function tag(t, a, text) {
+    const k = outExpo(prog(t, a, a + 0.6));
+    ctx.save();
+    ctx.globalAlpha *= k;
+    ctx.font = `700 24px ${MONO}`;
+    const w = ctx.measureText(text).width + 36;
+    rr((W - w) / 2, 70, w, 44, 22);
+    ctx.fillStyle = "rgba(113,153,255,0.14)"; ctx.fill();
+    ctx.strokeStyle = C.accent; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = C.accent; ctx.textAlign = "center";
+    ctx.fillText(text, W / 2, 93);
+    ctx.restore();
+  }
+
+  // ft_printf: va_arg walks the extra arguments while the output types itself
+  function scenePrintf(t) {
+    const A = window_(t, 23.3, 28.7, 0.4, 0.45);
+    if (A <= 0) return;
+    ctx.save();
+    ctx.globalAlpha = A;
+    tag(t, 23.35, "ft_printf");
+    const kc = outExpo(prog(t, 23.4, 24.1));
+    rr(90, 150 + (1 - kc) * 40, 900, 110, 24);
+    ctx.fillStyle = C.card; ctx.fill(); ctx.strokeStyle = C.line; ctx.lineWidth = 2; ctx.stroke();
+    const S1 = [24.8, 25.6], S2 = [25.9, 26.7];
+    const on = (w) => t >= w[0] && t < w[1] + 0.6;
+    const segs = [
+      { t: "ft_printf(", c: C.ink }, { t: '"', c: C.orange }, { t: "%s", c: C.orange, hl: S1 }, { t: " is ", c: C.orange },
+      { t: "%d", c: C.orange, hl: S2 }, { t: '!\\n"', c: C.orange }, { t: ", ", c: C.ink }, { t: '"42"', c: C.orange, hl: S1 },
+      { t: ", ", c: C.ink }, { t: "42", c: C.teal, hl: S2 }, { t: ");", c: C.ink },
+    ];
+    ctx.font = `600 34px ${MONO}`; ctx.textAlign = "left";
+    let x = (W - segs.reduce((a, g) => a + ctx.measureText(g.t).width, 0)) / 2;
+    const cy = 205 + (1 - kc) * 40;
+    for (const g of segs) {
+      const w = ctx.measureText(g.t).width;
+      if (g.hl && on(g.hl)) { rr(x - 4, cy - 26, w + 8, 52, 8); ctx.fillStyle = "rgba(113,153,255,0.22)"; ctx.fill(); }
+      ctx.fillStyle = g.c; ctx.fillText(g.t, x, cy);
+      x += w;
+    }
+    // the ... arguments, crossed out once va_arg has taken them
+    const args = [{ x: 330, w: 180, text: '"42"', type: "char *", at: S1[0] }, { x: 560, w: 120, text: "42", type: "int", at: S2[0] }];
+    const ka = outExpo(prog(t, 23.9, 24.5));
+    ctx.globalAlpha = A * ka;
+    ctx.font = `700 36px ${MONO}`; ctx.fillStyle = C.muted; ctx.textAlign = "right";
+    ctx.fillText("...", 300, 372);
+    args.forEach((g, k) => {
+      const used = t > g.at + 0.5;
       ctx.save();
-      ctx.globalAlpha = A * a;
-      ctx.translate(x + cw / 2, y + ch / 2 + (1 - a) * 18);
-      const sc = g > 0 ? lerp(1, 1, 1) * (1 + 0.08 * Math.sin(g * Math.PI)) : 1;
-      ctx.scale(sc, sc);
-      rr(-cw / 2, -ch / 2, cw, ch, 12);
-      ctx.fillStyle = g > 0 ? `rgba(99,199,132,${0.16 * g})` : C.card; ctx.fill();
-      ctx.strokeStyle = g > 0 ? C.green : C.line; ctx.lineWidth = 2; ctx.stroke();
-      ctx.font = `600 ${n.length > 10 ? 14 : n.length > 8 ? 16 : 17}px ${MONO}`; ctx.fillStyle = g > 0.5 ? C.ink : C.muted; ctx.textAlign = "center";
-      ctx.fillText(n, g > 0 ? 8 : 0, 1);
-      if (g > 0) { ctx.globalAlpha = A * a * g; ctx.fillStyle = C.green; ctx.font = `700 16px ${DISPLAY}`; ctx.fillText("✓", -cw / 2 + 14, 1); }
+      ctx.globalAlpha = A * ka * (used ? 0.45 : 1);
+      rr(g.x, 337, g.w, 70, 14);
+      ctx.fillStyle = C.card; ctx.fill();
+      ctx.strokeStyle = !used && t >= g.at ? C.accent : C.line; ctx.lineWidth = 3; ctx.stroke();
+      ctx.font = `600 32px ${MONO}`; ctx.fillStyle = k ? C.teal : C.orange; ctx.textAlign = "center";
+      ctx.fillText(g.text, g.x + g.w / 2, 373);
+      if (used) { ctx.strokeStyle = C.muted; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(g.x + 12, 372); ctx.lineTo(g.x + g.w - 12, 372); ctx.stroke(); }
+      ctx.font = `400 20px ${MONO}`; ctx.fillStyle = C.muted;
+      ctx.fillText(g.type, g.x + g.w / 2, 424);
       ctx.restore();
     });
+    // ap points at the next argument and slides along
+    const kp = prog(t, 24.3, 24.8);
+    if (kp > 0) {
+      const dot = [210, 495];
+      ctx.globalAlpha = A * kp;
+      ctx.font = `700 30px ${MONO}`; ctx.fillStyle = C.ink; ctx.textAlign = "right";
+      ctx.fillText("ap", 188, dot[1] + 1);
+      ctx.beginPath(); ctx.arc(dot[0], dot[1], 10, 0, Math.PI * 2); ctx.fillStyle = C.accent; ctx.fill();
+      const u = inOut(prog(t, 25.6, 25.95));
+      const end = t > S2[1] + 0.3;
+      const tx = lerp(args[0].x + args[0].w / 2, args[1].x + args[1].w / 2, u);
+      if (!end) curveArrow(dot, [dot[0] + 60, dot[1]], [tx, 490], [tx, 450], outCubic(kp), C.accent, 4);
+      else { ctx.font = `400 22px ${MONO}`; ctx.fillStyle = C.muted; ctx.textAlign = "left"; ctx.fillText("va_end", 232, dot[1] + 1); }
+    }
+    // the output, typed as each conversion is printed
+    ctx.globalAlpha = A * outExpo(prog(t, 24.1, 24.7));
+    rr(90, 560, 900, 130, 20);
+    ctx.fillStyle = "#070a0f"; ctx.fill(); ctx.strokeStyle = C.line; ctx.lineWidth = 2; ctx.stroke();
+    ctx.font = `600 20px ${DISPLAY}`; ctx.fillStyle = C.muted; ctx.textAlign = "left";
+    ctx.fillText("output", 120, 592);
+    const out = (t >= 24.95 ? "42" : "") + (t >= 25.3 ? " is " : "") + (t >= 26.05 ? "42" : "") + (t >= 26.4 ? "!" : "");
+    ctx.font = `600 44px ${MONO}`; ctx.fillStyle = C.ink;
+    ctx.fillText(out, 120, 642);
+    if (Math.floor(t * 3) % 2 === 0) { ctx.fillStyle = C.accent; ctx.fillRect(122 + ctx.measureText(out).width, 620, 4, 44); }
     ctx.restore();
-    caption(t, 23.7, 27.5, "All 43 libft exercises.", 770, { size: 54 });
-    caption(t, 24.7, 27.5, "Hints, never answers.", 840, { size: 38, color: C.muted, weight: 400 });
+    caption(t, 24.6, 28.7, "Variadic arguments, one va_arg at a time.", 840, { size: 42 });
+  }
+
+  // get_next_line: read() pulls BUFFER_SIZE bytes, the static stash keeps the rest
+  function sceneGnl(t) {
+    const A = window_(t, 28.7, 34.1, 0.4, 0.45);
+    if (A <= 0) return;
+    ctx.save();
+    ctx.globalAlpha = A;
+    tag(t, 28.75, "get_next_line");
+    const file = "hello\nworld\n";
+    const R1 = 29.5, R2 = 30.6, CUT = 31.7;
+    const pos = t < R1 ? 0 : t < R1 + 0.4 ? lerp(0, 4, inOut(prog(t, R1, R1 + 0.4))) : t < R2 ? 4 : t < R2 + 0.4 ? lerp(4, 8, inOut(prog(t, R2, R2 + 0.4))) : 8;
+    const s = 62, gap = 8, x0 = (W - (12 * s + 11 * gap)) / 2, fy = 196;
+    const kf = outExpo(prog(t, 28.8, 29.3));
+    ctx.globalAlpha = A * kf;
+    ctx.font = `600 22px ${MONO}`; ctx.textAlign = "left";
+    ctx.fillStyle = C.ink; ctx.fillText("fd 3", x0, fy - 26);
+    ctx.fillStyle = C.muted; ctx.fillText("t.txt", x0 + 70, fy - 26);
+    [...file].forEach((c, k) => {
+      const nl = c === "\n";
+      cell(x0 + k * (s + gap), fy, s, nl ? "\\n" : c, { alpha: k < Math.floor(pos) ? 0.35 : 1, text: nl ? C.nul : C.ink, stroke: Math.round(pos) === k ? C.accent : C.line });
+    });
+    const cx = x0 + pos * (s + gap) + s / 2;
+    ctx.font = `700 20px ${MONO}`; ctx.fillStyle = C.accent; ctx.textAlign = "center";
+    ctx.fillText("next", cx, fy + s + 26);
+    // the buffer read() fills
+    const by = 360;
+    ctx.font = `600 22px ${MONO}`; ctx.textAlign = "left";
+    ctx.fillStyle = C.ink; ctx.fillText("buf", x0, by - 22);
+    ctx.fillStyle = C.muted; ctx.fillText("BUFFER_SIZE = 4", x0 + 56, by - 22);
+    const chunk = t >= R2 + 0.4 ? "o\nwo" : t >= R1 + 0.4 ? "hell" : "";
+    const fresh = (t >= R1 + 0.4 && t < R1 + 1.0) || (t >= R2 + 0.4 && t < R2 + 1.0);
+    for (let k = 0; k < 4; k++) {
+      const c = chunk[k];
+      cell(x0 + k * (s + gap), by, s, c == null ? "?" : c === "\n" ? "\\n" : c, { text: c == null ? C.muted : c === "\n" ? C.nul : C.ink, stroke: fresh ? C.orange : C.line, fill: fresh ? "#2b1d10" : C.card });
+    }
+    // the static stash outlives the call
+    const sx = x0 + 4 * (s + gap) + 50, sw = x0 + 12 * (s + gap) - gap - sx;
+    ctx.save();
+    ctx.setLineDash([10, 7]); rr(sx, by - 10, sw, 82, 16);
+    ctx.strokeStyle = C.violet; ctx.lineWidth = 2.5; ctx.stroke(); ctx.setLineDash([]);
+    ctx.font = `700 20px ${MONO}`; ctx.fillStyle = C.violet; ctx.textAlign = "left";
+    ctx.fillText("static char *stash", sx + 16, by - 30);
+    const stash = t >= CUT + 0.3 ? "wo" : t >= R2 + 0.4 ? "hello\nwo" : t >= R1 + 0.4 ? "hell" : null;
+    ctx.font = `600 34px ${MONO}`;
+    let tx = sx + 22;
+    if (stash == null) { ctx.fillStyle = C.muted; ctx.fillText("NULL", tx, by + 32); }
+    else for (const c of stash) { const piece = c === "\n" ? "\\n" : c; ctx.fillStyle = c === "\n" ? C.nul : C.ink; ctx.fillText(piece, tx, by + 32); tx += ctx.measureText(piece).width; }
+    ctx.restore();
+    // the line leaves the stash and is returned
+    const kl = outExpo(prog(t, CUT, CUT + 0.6));
+    if (kl > 0) {
+      const ly = lerp(by + 10, 560, kl);
+      ctx.save();
+      ctx.globalAlpha = A * kl;
+      rr(W / 2 - 250, ly, 500, 84, 18);
+      ctx.fillStyle = "rgba(99,199,132,0.14)"; ctx.fill(); ctx.strokeStyle = C.green; ctx.lineWidth = 2.5; ctx.stroke();
+      ctx.font = `600 22px ${DISPLAY}`; ctx.fillStyle = C.green; ctx.textAlign = "left";
+      ctx.fillText("returns", W / 2 - 220, ly + 43);
+      ctx.font = `600 34px ${MONO}`; ctx.fillStyle = C.ink;
+      ctx.fillText('"hello', W / 2 - 110, ly + 43);
+      ctx.fillStyle = C.nul; ctx.fillText("\\n", W / 2 - 110 + ctx.measureText('"hello').width, ly + 43);
+      ctx.fillStyle = C.ink; ctx.fillText('"', W / 2 - 110 + ctx.measureText('"hello\\n').width, ly + 43);
+      ctx.restore();
+    }
+    ctx.restore();
+    caption(t, 29.3, 31.6, "read() fills a buffer, one chunk at a time.", 790, { size: 40 });
+    caption(t, 31.7, 34.1, "A static stash keeps the rest for the next call.", 790, { size: 40 });
   }
 
   function sceneLogo(t) {
@@ -489,8 +660,10 @@
     sceneStrlen(t);
     sceneOverflow(t);
     sceneFlow(t);
-    sceneExercises(t);
-    sceneLogo(t);
+    scenePrintf(t);
+    sceneGnl(t);
+    sceneExercises(t - SHIFT);
+    sceneLogo(t - SHIFT);
     ctx.restore();
   }
 
@@ -544,17 +717,17 @@
       save(new Blob(chunks, { type }), `libft-lens-intro.${type.startsWith("video/mp4") ? "mp4" : "webm"}`);
     };
     btnRec.disabled = btnPlay.disabled = true;
-    status.textContent = "Recording… keep this tab visible for 31 seconds.";
+    status.textContent = `Recording… keep this tab visible for ${Math.round(DURATION)} seconds.`;
     render(0);
     rec.start(250);
     play(() => setTimeout(() => rec.stop(), 300));
   };
 
-  btnPoster.onclick = () => { render(30.2); cv.toBlob((b) => save(b, "libft-lens-poster.png"), "image/png"); };
+  btnPoster.onclick = () => { render(30.2 + SHIFT); cv.toBlob((b) => save(b, "libft-lens-poster.png"), "image/png"); };
 
   window.libftIntro = { render, DURATION };
   Promise.all([
     document.fonts.load(`700 90px ${DISPLAY}`), document.fonts.load(`400 40px ${DISPLAY}`),
     document.fonts.load(`600 28px ${MONO}`),
-  ]).catch(() => {}).finally(() => render(30.2));
+  ]).catch(() => {}).finally(() => render(30.2 + SHIFT));
 })();

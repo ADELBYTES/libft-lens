@@ -10,7 +10,7 @@
 <p align="center">
   <a href="https://adelbytes.github.io/libft-lens/"><b>▶ Open it online</b></a> ·
   <a href="https://adelbytes.github.io/libft-lens/docs.html#tour">2-minute tour</a> ·
-  <a href="https://adelbytes.github.io/libft-lens/media/libft-lens-intro.mp4">30-second video</a> ·
+  <a href="https://adelbytes.github.io/libft-lens/media/libft-lens-intro.mp4">40-second video</a> ·
   <a href="https://adelbytes.github.io/libft-lens/docs.html">Docs</a>
 </p>
 
@@ -126,8 +126,8 @@ The interpreter keeps one flat byte array with a `NULL` page, red zones between 
 | `src/checks.js` | Prototype, forbidden-function, compiler, subject and Norm checks |
 | `src/libft.js`, `src/packs.js`, `src/exercises.js`, `src/blocks.js` | Subjects, test drivers, hints, reference solutions with hidden steps |
 | `src/flow.js`, `src/app.js` | Flowchart graph; the UI |
-| `demo/` | The intro film as a canvas animation (`npm run record` saves it as a video) |
-| `tools/serve.py`, `tools/shots.mjs` | No-cache dev server; tour screenshots with headless Chrome (also a click-through smoke test) |
+| `demo/` | The intro film as a canvas animation, drawn as a pure function of time |
+| `tools/serve.py`, `tools/shots.mjs`, `tools/render-intro.mjs` | No-cache dev server; tour screenshots with headless Chrome (also a click-through smoke test); the intro film rendered frame by frame at 60 fps and encoded with ffmpeg |
 
 ### Tests
 
@@ -146,6 +146,10 @@ Next: an AI coach in a chat box beside your code, running on your own machine (O
 ### Contributing
 
 Issues and pull requests are welcome. To add or change an exercise, edit `src/exercises.js` or `src/packs.js` (the reference solution with its hidden steps) and the test drivers, then run `npm test`. It refuses any exercise whose reference fails a test, breaks the Norm or leaks.
+
+### License
+
+[MIT](LICENSE): use it, change it and share it, including in your own projects and courses. Keep the copyright notice.
 
 ---
 

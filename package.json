@@ -7,6 +7,8 @@
   "scripts": {
     "start": "python3 tools/serve.py 8080",
     "test": "node --test test/*.test.js",
-    "record": "python3 tools/serve.py 8080 --save"
-  }
+    "record": "python3 tools/serve.py 8080 --save",
+    "film": "node tools/render-intro.mjs"
+  },
+  "license": "MIT"
 }
