@@ -16,7 +16,13 @@ export function summarize(r) {
   if (!ok) for (const w of [...new Set(r.warnings.map((x) => x.msg))].slice(0, 2)) msgs.push(w);
   // compile errors cc would raise (such as -Wsign-compare), reported even when behaviour is right
   const cc = [...new Set(r.warnings.filter((x) => x.cc).map((x) => x.msg))];
-  return { ok, msgs, cc };
+  // structured parts, so the page can lead with one clear sentence
+  return {
+    ok, msgs, cc,
+    error: r.error ? r.error.msg : null,
+    failed: r.expects.filter((x) => !x.ok).map((x) => x.msg),
+    warns: [...new Set(r.warnings.filter((x) => !x.cc).map((x) => x.msg))],
+  };
 }
 
 function runOne(a, trace) {

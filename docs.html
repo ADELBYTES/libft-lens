@@ -57,12 +57,14 @@
       <h2>The screen</h2>
       <dl>
         <dt>Exercise card</dt><dd>The goal in plain words, the prototype from the subject, the functions you may call, and live checks: prototype, allowed functions, compile problems, subject rules and a partial Norm check.</dd>
-        <dt>Your code</dt><dd>Your file for this exercise, saved in this browser. Problems that would stop <code>cc -Wall -Wextra -Werror</code> appear right under it.</dd>
-        <dt>Steps to get there</dt><dd>The plan, one step per placeholder. Reveal a step only when you need it (see <a href="#stuck">Getting unstuck</a>).</dd>
-        <dt>Tests</dt><dd>Click a test to make it the one that runs and that the memory view shows. A failing test says what was expected and what your code gave.</dd>
+        <dt>Your code</dt><dd>Your file for this exercise, saved in this browser. The <b>next step</b> of the plan sits right above it; problems that would stop <code>cc -Wall -Wextra -Werror</code> appear right under it. Drag the editor's bottom edge to resize it.</dd>
+        <dt>All steps</dt><dd>The whole plan, one step per placeholder, folded under the editor. Reveal a step only when you need it (see <a href="#stuck">Getting unstuck</a>).</dd>
+        <dt>Tests</dt><dd>Click a test to make it the one that runs and that the memory view shows. A failing test leads with one plain sentence; the raw output is under Details. As soon as you edit, results are marked outdated until your code runs again.</dd>
+        <dt>Trace context</dt><dd>Above the step controls: which test is running, which call of your function you are watching (with its input, such as <code>'m' (109)</code>), and whether that call's check passed. Playback opens on the first failing call; <b>Start this call</b> and <b>Next call</b> move between calls.</dd>
         <dt>Step controls</dt><dd>First, back, play, next, last, and a slider. The sentence under them says what the last line did and what runs next.</dd>
         <dt>Memory and Flow</dt><dd>Two views of the same moment. Memory shows variables and bytes; Flow shows the function as a flowchart with the line about to run highlighted and a count of how often each line ran.</dd>
         <dt>Free code</dt><dd>A mode for any C in the <a href="#limits">supported subset</a>: paste a program with a <code>main</code>, or load an example.</dd>
+        <dt>On a phone</dt><dd>The page splits into <b>Code</b>, <b>Tests</b> and <b>Visualize</b> views, with your test score always visible on the Tests button.</dd>
       </dl>
     </section>
 
@@ -108,6 +110,7 @@
         <dt>Subject rules</dt><dd>libft: no global variables, and helper functions must be <code>static</code>. get_next_line: no global variables, and your libft is not allowed (calls to it are flagged and not linked). ft_printf may use your libft.</dd>
         <dt>Norm (partial)</dt><dd>Line length, trailing spaces, tabs for indentation and alignment, space after <code>if</code>/<code>while</code>/<code>return</code>, <code>return (value);</code>, no comments inside functions, at most 25 lines, 4 parameters, 5 variables and 5 functions, declarations at the top and not initialised, one declaration per line, no <code>for</code>.</dd>
       </dl>
+      <p>An exercise is <b>complete</b> (a check mark on the rail) only when its mandatory tests pass <i>and</i> the prototype, allowed-function, compiler and subject checks are clean. Passing tests with a forbidden call, for example, is not complete. The partial Norm check is shown but does not block.</p>
       <p class="note-box">A green exercise here is strong evidence, not a guarantee. Always confirm with the real <code>cc -Wall -Wextra -Werror</code>, <code>norminette</code>, and your own tests before you submit.</p>
     </section>
 

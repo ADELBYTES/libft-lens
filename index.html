@@ -31,15 +31,31 @@
   </div>
 </header>
 
-<nav class="rail" id="rail" aria-label="Exercises, easy to hard"></nav>
+<nav class="rail" id="railNav" aria-label="Exercises, easy to hard">
+  <div class="packs" id="packs" role="tablist" aria-label="Project"></div>
+  <input type="search" id="exSearch" class="rail-search" placeholder="Find a function" aria-label="Find an exercise" autocomplete="off">
+  <div class="rail-track" id="railTrack">
+    <button class="rail-arrow" id="railLeft" aria-label="Scroll the exercises left">‹</button>
+    <div class="rail-scroll" id="rail"></div>
+    <button class="rail-arrow" id="railRight" aria-label="Scroll the exercises right">›</button>
+  </div>
+</nav>
+
+<nav class="mviews" id="mviews" aria-label="View">
+  <button data-mview="code" aria-pressed="true">Code</button>
+  <button data-mview="tests" aria-pressed="false"><span id="mTestsLabel">Tests</span> <span class="mbadge" id="mbadge"></span></button>
+  <button data-mview="viz" aria-pressed="false">Visualize</button>
+</nav>
 
 <main class="grid">
   <div class="col left">
-    <section class="panel ex-card" id="exCard"></section>
+    <section class="panel ex-card v-code" id="exCard"></section>
 
-    <section class="panel">
+    <section class="panel v-code">
       <div class="panel-h"><h2>Your code</h2><span class="hint" id="live"></span></div>
       <div class="panel-b">
+        <div id="stepbar"></div>
+        <div id="stuck"></div>
         <div class="editor" id="editor">
           <div class="gutter" id="gutter" aria-hidden="true"></div>
           <div class="ed-main">
@@ -51,23 +67,23 @@
         <p class="ed-tip">Click a line to see memory at that moment. Your code runs as you type.</p>
         <div id="diag" aria-live="polite"></div>
         <div id="blocks"></div>
-        <div id="stuck"></div>
       </div>
     </section>
 
-    <section class="panel">
+    <section class="panel v-tests">
       <div class="panel-h"><h2>Output</h2><span class="hint">what printf and write printed</span></div>
       <div class="panel-b"><pre class="out" id="out"></pre></div>
     </section>
   </div>
 
   <div class="col right">
-    <section class="panel" id="testsPanel">
+    <section class="panel v-tests" id="testsPanel">
       <div class="panel-h"><h2>Tests</h2><span class="hint" id="testsHint"></span></div>
       <div class="panel-b" id="tests"></div>
     </section>
 
-    <section class="panel viz">
+    <section class="panel viz v-viz">
+      <div class="ctx" id="ctx" hidden></div>
       <div class="bar">
         <div class="ctrls">
           <button id="bFirst" aria-label="First step"><svg viewBox="0 0 16 16"><path d="M3 2h2v12H3zM14 2v12L6 8z"/></svg></button>

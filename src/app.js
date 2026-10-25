@@ -53,6 +53,24 @@ const packOf = (n) => (CATALOG[n] ? CATALOG[n].pack : "libft");
 // a test passes the exercise only through its mandatory tests; bonus tests are extra
 const mandatoryOk = (n, res) => TESTS[n].every((t, k) => t.bonus || (res[k] && res[k].ok));
 
+// what still stops an exercise from counting as complete, even when its tests pass
+function blockersFor(n, code, res) {
+  let program;
+  try { program = compile(assemble({ code })); } catch { return ["the code does not compile"]; }
+  const fn = program.items.find((f) => f.k === "func" && f.name === n && f.file === "main");
+  if (!fn) return [`${n} is missing from your code`];
+  const out = [];
+  const chk = checkFunction(program, fn, { pack: packOf(n) });
+  if (chk.protoOk === false) out.push("the prototype differs from the subject");
+  for (const f of new Set(chk.forbidden.map((x) => x.name))) out.push(`it calls ${f}(), which is not allowed here`);
+  const file = fileCheck(program, code, { pack: packOf(n) });
+  const cc = file.filter((x) => x.kind === "cc").length + new Set((res || []).flatMap((r) => r.cc || [])).size;
+  if (cc) out.push(`${cc} problem${cc > 1 ? "s" : ""} that cc -Wall -Wextra -Werror refuses`);
+  const subj = file.filter((x) => x.kind === "subject").length;
+  if (subj) out.push(`${subj} subject rule${subj > 1 ? "s" : ""} broken`);
+  return out;
+}
+
 function library(name) {
   if (S.mode === "ex" && name === S.exId) return null; // never link the answer to the exercise being solved
   if (S.mode === "ex" && !linkable(name, packOf(S.exId))) return null; // e.g. libft is forbidden in get_next_line
@@ -103,7 +121,15 @@ function currentHarness() {
 }
 
 function runNow() {
-  if (S.live && S.live.error) { setLive(`line ${S.live.error.line}: ${S.live.error.msg}`, "bad"); renderAll(); return; }
+  if (S.live && S.live.error) {
+    // code that does not compile has no results and is not complete
+    S.stale = false;
+    S.trace = null;
+    if (S.mode === "ex") { S.testRes[S.exId] = null; S.status[S.exId] = "fail"; store.set("status", S.status); }
+    setLive(`line ${S.live.error.line}: ${S.live.error.msg}`, "bad");
+    renderAll();
+    return;
+  }
   const harness = currentHarness();
   const traceA = assemble({ code: S.code, harness, library });
   const tests = S.mode === "ex" ? TESTS[S.exId].map((t) => assemble({ code: S.code, harness: t, library })) : null;
@@ -129,9 +155,11 @@ function onResults(out) {
   clearTimeout(workerTimer);
   const { traceA, harness } = S.pending;
   S.pending = null;
+  S.stale = false;
   if (out.tests) {
     S.testRes[S.exId] = out.tests;
-    S.status[S.exId] = mandatoryOk(S.exId, out.tests) ? "pass" : "fail";
+    S.blockers = blockersFor(S.exId, S.code, out.tests);
+    S.status[S.exId] = mandatoryOk(S.exId, out.tests) && !S.blockers.length ? "pass" : "fail";
     store.set("status", S.status);
   }
   const t = out.trace;
@@ -143,7 +171,9 @@ function onResults(out) {
     const res = S.testRes[S.exId];
     if (S.mode === "ex" && res) {
       const mand = TESTS[S.exId].map((x, k) => [x, res[k]]).filter(([x]) => !x.bonus), passed = mand.filter(([, r]) => r.ok).length;
-      setLive(passed === mand.length ? `all ${mand.length} tests pass` : `${passed} of ${mand.length} tests pass`, passed === mand.length ? "ok" : "bad");
+      const all = mand.length === 1 ? "the test passes" : `all ${mand.length} tests pass`;
+      const complete = S.status[S.exId] === "pass";
+      setLive(passed === mand.length ? (complete ? all : `${all}, checks still failing`) : `${passed} of ${mand.length} tests pass`, complete ? "ok" : "bad");
     }
     else setLive(t.result.error ? "stopped with an error" : "ran to the end", t.result.error ? "bad" : "ok");
   } else {
@@ -153,11 +183,73 @@ function onResults(out) {
   renderAll();
 }
 
-// show memory at the cursor line when it ran; otherwise the crash or the end state
+// After you click a line, show memory at that line. Otherwise start where a
+// student would: at the crash if there is one, else at the first call of the
+// function being practised.
 function pickPos() {
   const steps = S.trace.result.steps;
-  for (let k = steps.length - 1; k >= 0; k--) if (steps[k].file === "main" && steps[k].line === S.cursorLine && steps[k].kind !== "end") return k;
-  return steps.length - 1;
+  if (S.follow) for (let k = steps.length - 1; k >= 0; k--) if (steps[k].file === "main" && steps[k].line === S.cursorLine && steps[k].kind !== "end") return k;
+  if (S.trace.result.error) return steps.length - 1;
+  const calls = outerCalls();
+  // the first call whose check fails is the one worth watching
+  return calls.find((k) => { const ev = expectAfter(k); return ev && !ev.ok; }) ?? calls[0] ?? 0;
+}
+
+// the first test check made after step k: the verdict on that call
+function expectAfter(k) {
+  const steps = S.trace.result.steps;
+  for (let j = k + 1; j < steps.length; j++) { const ev = steps[j].events.find((x) => x.k === "expect"); if (ev) return ev; }
+  return null;
+}
+
+// steps where the practised function is entered from outside (recursive calls do not count)
+function outerCalls() {
+  if (!S.trace) return [];
+  const target = S.mode === "ex" ? S.exId : null;
+  if (!target) return [];
+  return S.trace.result.steps.flatMap((s, k) => (s.kind === "enter" && s.fn === target && s.frames.filter((f) => f.name === target).length === 1 ? [k] : []));
+}
+
+// how an argument reads to a person: 'm' (109) for characters, "hi!" for strings
+function argText(v, step) {
+  if (v.kind === "ptr") {
+    if (!v.init) return "?";
+    if (v.target && v.target.null) return "NULL";
+    const b = v.target && step.blocks.find((x) => x.id === v.target.block);
+    if (b && /char/.test(b.elem) && b.elemSize === 1) {
+      let s = "";
+      for (let k = Math.floor(v.target.off / b.elemSize); k < b.cells.length && s.length < 24; k++) { const c = b.cells[k]; if (!c.init || c.raw === 0) break; s += c.text; }
+      return JSON.stringify(s).replace(/\\\\/g, "\\");
+    }
+    return "pointer";
+  }
+  if (v.kind === "char" || ((v.kind === "int") && /^(c|ch)$/.test(v.name))) {
+    const n = Number(v.kind === "char" ? v.num : v.text);
+    return n >= 32 && n < 127 ? `'${String.fromCharCode(n)}' (${n})` : String(n);
+  }
+  return v.text;
+}
+
+function renderCtx() {
+  const el = $("ctx");
+  const calls = outerCalls();
+  if (S.mode !== "ex" || !S.trace || !S.trace.harness) { el.hidden = true; return; }
+  el.hidden = false;
+  const steps = S.trace.result.steps;
+  const name = S.trace.harness.name.replace(/^bonus: /, "");
+  let h = `<span class="ctx-test">Test <b>${esc(name)}</b></span>`;
+  const cur = [...calls].reverse().find((k) => k <= S.pos);
+  if (!calls.length) h += `<span class="ctx-call">${esc(S.exId)}() is never called in this run.</span>`;
+  else if (cur == null) h += `<span class="ctx-call">Before the first call of <code>${esc(S.exId)}()</code></span><span class="ctx-acts"><button class="mini" data-goto="${calls[0]}">Go to the first call</button></span>`;
+  else {
+    const ci = calls.indexOf(cur), st = steps[cur], fr = st.frames[st.frames.length - 1];
+    const args = fr.vars.filter((v) => v.param).map((v) => argText(v, st)).join(", ");
+    const exp = expectAfter(cur);
+    h += `<span class="ctx-call">Call ${ci + 1} of ${calls.length}: <code>${esc(S.exId)}(${esc(args)})</code></span>`;
+    if (exp) h += `<span class="ctx-exp ${exp.ok ? "ok" : "bad"}">${exp.ok ? "✓" : "✗"} ${esc(tidy(exp.msg))}</span>`;
+    h += `<span class="ctx-acts"><button class="mini" data-goto="${cur}">Start this call</button>${calls[ci + 1] != null ? `<button class="mini" data-goto="${calls[ci + 1]}">Next call</button>` : ""}</span>`;
+  }
+  el.innerHTML = h;
 }
 
 function setLive(text, cls) { const el = $("live"); el.textContent = text; el.className = "hint " + (cls || ""); }
@@ -211,6 +303,13 @@ function renderEditor(anim = false) {
   syncScroll();
 }
 
+// size the editor to its file once, when a file opens; after that the user may drag it
+function fitEditor() {
+  const lines = S.code.split("\n").length;
+  const h = Math.max(200, Math.min(440, lines * 21 + 24));
+  $("editor").style.height = (matchMedia("(max-width: 960px)").matches ? Math.min(h, 360) : h) + "px";
+}
+
 function syncScroll() {
   hl.scrollTop = ta.scrollTop; hl.scrollLeft = ta.scrollLeft; gutter.scrollTop = ta.scrollTop;
   $("curbar").style.setProperty("--st", ta.scrollTop + "px");
@@ -235,7 +334,12 @@ let liveTimer = null;
 function onCodeChanged() {
   S.code = ta.value;
   store.set(codeKey(), S.code);
+  // results belong to the code that produced them: anything in flight is dropped
+  S.pending = null;
+  S.seq++;
+  if (!S.stale) { S.stale = true; renderTests(); renderBadge(); }
   renderEditor();
+  renderStepbar();
   clearTimeout(liveTimer);
   setLive("waiting for you to pause…", "busy");
   if (S.code.length > MAX_CODE) { setLive(`file is over ${MAX_CODE / 1000} KB: too large to run here`, "bad"); return; }
@@ -257,6 +361,7 @@ const trackCursor = () => {
   const line = ta.value.slice(0, ta.selectionStart).split("\n").length;
   if (line === S.cursorLine) return;
   S.cursorLine = line;
+  S.follow = true;
   if (S.trace) {
     const steps = S.trace.result.steps;
     for (let k = steps.length - 1; k >= 0; k--) if (steps[k].file === "main" && steps[k].line === line && steps[k].kind !== "end") { stop(); S.pos = k; renderStep(false); return; }
@@ -730,24 +835,81 @@ function renderFlow(anim = false) {
 /* ---------------- exercise card, steps, hints ---------------- */
 
 function renderRail() {
-  const rail = $("rail");
-  rail.hidden = S.mode !== "ex";
-  if (rail.hidden) return;
+  const nav = $("railNav"), rail = $("rail");
+  nav.hidden = S.mode !== "ex";
+  if (nav.hidden) return;
   const pack = packOf(S.exId);
-  let h = '<div class="packs" role="tablist" aria-label="Project">' + Object.entries(PACKS).map(([id, p]) => {
+  $("packs").innerHTML = Object.entries(PACKS).map(([id, p]) => {
     const done = p.order.filter((n) => S.status[n] === "pass").length;
     return `<button role="tab" data-pack="${id}" aria-selected="${id === pack}">${esc(p.title)} <span class="pk-count">${done}/${p.order.length}</span></button>`;
-  }).join("") + "</div>";
-  let part = null;
+  }).join("");
+  let h = "", part = null;
   PACKS[pack].order.forEach((n, i) => {
     const p = CATALOG[n].part;
-    if (p !== part && pack === "libft") { part = p; h += `<span class="part">${PARTS[p]}</span>`; }
+    // section labels double as jump targets
+    if (p !== part && pack === "libft") { part = p; h += `<button class="part" data-jump="${esc(String(p))}">${PARTS[p]}</button>`; }
     const st = S.status[n];
-    h += `<button data-ex="${n}" aria-current="${n === S.exId}"><span class="pip ${st || ""}${S.assisted[n] ? " assisted" : ""}">${st === "pass" ? "✓" : st === "fail" ? "!" : i + 1}</span>${n.replace(/^ft_|^pf_|^gnl_/, "")}</button>`;
+    h += `<button data-ex="${n}" data-part="${esc(String(p))}" aria-current="${n === S.exId}"><span class="pip ${st || ""}${S.assisted[n] ? " assisted" : ""}">${st === "pass" ? "✓" : st === "fail" ? "!" : i + 1}</span>${n.replace(/^ft_|^pf_|^gnl_/, "")}</button>`;
   });
   rail.innerHTML = h;
+  filterRail();
   const cur = rail.querySelector('[aria-current="true"]');
   if (cur) cur.scrollIntoView({ block: "nearest", inline: "center" });
+  railEdges();
+}
+
+// show which way the exercise strip can scroll
+function railEdges() {
+  const r = $("rail"), t = $("railTrack");
+  const left = r.scrollLeft > 4, right = r.scrollLeft + r.clientWidth < r.scrollWidth - 4;
+  t.classList.toggle("more-left", left);
+  t.classList.toggle("more-right", right);
+  $("railLeft").hidden = !left;
+  $("railRight").hidden = !right;
+}
+
+function filterRail() {
+  const q = $("exSearch").value.trim().toLowerCase().replace(/^ft_/, "");
+  const rail = $("rail");
+  for (const b of rail.querySelectorAll("[data-ex]")) b.hidden = !!q && !b.dataset.ex.toLowerCase().includes(q);
+  for (const p of rail.querySelectorAll("[data-jump]")) p.hidden = !!q && !rail.querySelector(`[data-ex][data-part="${p.dataset.jump}"]:not([hidden])`);
+  railEdges();
+}
+
+$("rail").addEventListener("scroll", railEdges, { passive: true });
+window.addEventListener("resize", railEdges);
+$("railLeft").onclick = () => $("rail").scrollBy({ left: -$("rail").clientWidth * 0.7, behavior: reduceMotion() ? "auto" : "smooth" });
+$("railRight").onclick = () => $("rail").scrollBy({ left: $("rail").clientWidth * 0.7, behavior: reduceMotion() ? "auto" : "smooth" });
+// search across every project: typing filters this project's rail, Enter opens the first match anywhere
+$("exSearch").addEventListener("input", filterRail);
+$("exSearch").addEventListener("keydown", (e) => {
+  if (e.key === "Escape") { e.target.value = ""; filterRail(); }
+  if (e.key !== "Enter") return;
+  const q = e.target.value.trim().toLowerCase().replace(/^ft_/, "");
+  const hit = q && ALL.find((n) => n.toLowerCase().replace(/^ft_/, "") === q) || ALL.find((n) => n.toLowerCase().includes(q));
+  if (hit) { e.target.value = ""; openExercise(hit); }
+});
+
+/* ---------------- small screens: one view at a time ---------------- */
+
+function setMview(v) {
+  document.body.dataset.mview = v;
+  for (const b of document.querySelectorAll("#mviews [data-mview]")) b.setAttribute("aria-pressed", b.dataset.mview === v);
+  window.scrollTo({ top: 0 });
+  if (v === "viz") requestAnimationFrame(() => { renderMemory(); renderFlow(); });
+}
+
+function renderBadge() {
+  const badge = $("mbadge");
+  $("mTestsLabel").textContent = S.mode === "ex" ? "Tests" : "Output";
+  const res = S.mode === "ex" && S.testRes[S.exId];
+  if (S.mode !== "ex") { badge.textContent = ""; badge.className = "mbadge"; return; }
+  if (S.stale) { badge.textContent = "…"; badge.className = "mbadge"; return; }
+  if (!res) { badge.textContent = S.live && S.live.error ? "!" : ""; badge.className = "mbadge bad"; return; }
+  const tests = TESTS[S.exId], mand = tests.filter((t) => !t.bonus).length;
+  const passed = tests.filter((t, k) => !t.bonus && res[k] && res[k].ok).length;
+  badge.textContent = `${passed}/${mand}`;
+  badge.className = "mbadge " + (S.status[S.exId] === "pass" ? "ok" : "bad");
 }
 
 function compileIssues() {
@@ -799,6 +961,28 @@ function renderExCard() {
   </div>`;
 }
 
+function stepBody(b, l, present) {
+  let h = "";
+  if (l >= 2) h += `<p>${esc(b.pseudo)}</p>`;
+  if (l === 3) h += `<pre>${esc(b.blanked.replace(/^\t/gm, ""))}</pre>`;
+  if (l >= 4) h += `<pre>${esc(b.code.replace(/^\t/gm, ""))}</pre>`;
+  const next = { 1: "Explain this step", 2: "Show it with blanks", 3: "Show the code" }[l];
+  h += `<div class="acts">${next ? `<button class="mini" data-reveal="${b.n}">${next}</button>` : ""}${l >= 4 && present.has(b.n) ? `<button class="mini solid" data-insert="${b.n}">Put it in my code</button>` : ""}</div>`;
+  return h;
+}
+
+// the first step whose placeholder is still in the code, right above the editor
+function renderStepbar() {
+  const el = $("stepbar");
+  if (S.mode !== "ex") { el.innerHTML = ""; return; }
+  const n = S.exId, { blocks } = REF[n];
+  const present = new Set(S.code.split("\n").map((l) => PLACEHOLDER_RE.exec(l)).filter(Boolean).map((m) => +m[2]));
+  const b = blocks.find((x) => present.has(x.n));
+  if (!b) { el.innerHTML = `<div class="stepbar done"><span class="num">✓</span><div><b>Every step is written.</b> <span class="muted">Check the tests on the right.</span></div></div>`; return; }
+  const l = (S.reveal[n] || {})[b.n] || 1;
+  el.innerHTML = `<div class="stepbar"><span class="num">${b.n}</span><div><div class="sb-head"><b>Next step: ${esc(b.purpose)}</b><span class="muted">${blocks.length - present.size} of ${blocks.length} done</span></div>${stepBody(b, l, present)}</div></div>`;
+}
+
 function renderBlocks() {
   const el = $("blocks");
   if (S.mode !== "ex") { el.innerHTML = ""; return; }
@@ -807,19 +991,15 @@ function renderBlocks() {
   const lv = S.reveal[n] || {};
   const present = new Set(S.code.split("\n").map((l) => PLACEHOLDER_RE.exec(l)).filter(Boolean).map((m) => +m[2]));
   const written = blocks.filter((b) => !present.has(b.n)).length;
-  let h = `<div class="steps-h"><h3>Steps to get there</h3><span>${written} of ${blocks.length} placeholders replaced</span></div><ol class="steps">`;
+  let h = `<details class="allsteps"${S.stepsOpen ? " open" : ""}><summary class="steps-h"><h3>All steps</h3><span>${written} of ${blocks.length} placeholders replaced</span></summary><ol class="steps">`;
   for (const b of blocks) {
     const l = lv[b.n] || 1;
     const isWritten = !present.has(b.n);
     h += `<li class="step${isWritten ? " written" : ""}"><span class="num">${isWritten ? "✓" : b.n}</span><div><b>${esc(b.purpose)}</b><span class="status">${isWritten ? "placeholder replaced" : ""}</span>`;
-    if (l >= 2) h += `<p>${esc(b.pseudo)}</p>`;
-    if (l === 3) h += `<pre>${esc(b.blanked.replace(/^\t/gm, ""))}</pre>`;
-    if (l >= 4) h += `<pre>${esc(b.code.replace(/^\t/gm, ""))}</pre>`;
-    const next = { 1: "Explain this step", 2: "Show it with blanks", 3: "Show the code" }[l];
-    h += `<div class="acts">${next ? `<button class="mini" data-reveal="${b.n}">${next}</button>` : ""}${l >= 4 && present.has(b.n) ? `<button class="mini solid" data-insert="${b.n}">Put it in my code</button>` : ""}</div>`;
-    h += "</div></li>";
+    h += stepBody(b, l, present) + "</div></li>";
   }
-  el.innerHTML = h + "</ol>";
+  el.innerHTML = h + "</ol></details>";
+  el.querySelector("details").addEventListener("toggle", (e) => { S.stepsOpen = e.target.open; });
 }
 
 function renderStuck() {
@@ -829,30 +1009,54 @@ function renderStuck() {
   let h = '<div class="stuck">';
   if (lv >= 1) h += `<div class="rung"><span class="lv">Question</span>${esc(hints[0])}</div>`;
   if (lv >= 2) h += `<div class="rung"><span class="lv">Concept</span>${esc(hints[1])}</div>`;
-  if (lv < 2) h += `<button class="reveal" id="hintBtn">${lv === 0 ? "Stuck? Ask me a question" : "Explain the idea"}</button>`;
+  if (lv < 2) h += `<button class="link hint-link" id="hintBtn">${lv === 0 ? "Stuck on the whole idea? Ask me a question" : "Explain the idea"}</button>`;
   el.innerHTML = h + "</div>";
+}
+
+// the garbage values a missing return produces read better as words
+const tidy = (m) => String(m).replace(/-1094795586|3200171710/g, "garbage").replace(/0xdeadbeef/g, "a garbage pointer");
+
+function headline(n, r) {
+  const left = S.code.split("\n").filter((l) => PLACEHOLDER_RE.test(l)).length;
+  const total = REF[n].blocks.length;
+  if (left === total) return `Not written yet: replace ${total > 1 ? `the ${total} ▢ steps` : "the ▢ step"} in your code with your own lines.`;
+  if (r.error) return r.error;
+  if (r.warns && r.warns.some((w) => /without a return/.test(w))) return `${n}() reaches its closing } without returning a value. Add a return.`;
+  if (r.warns && r.warns.some((w) => /never given a value/.test(w))) return `${n}() returns a variable it never set.`;
+  const failed = r.failed || r.msgs;
+  const first = tidy(failed[0] || r.msgs[0] || "This test failed.");
+  if (left) return `${left} step${left > 1 ? "s" : ""} still to write. First failing check: ${first}`;
+  return failed.length > 1 ? `${failed.length} checks failed. First: ${first}` : first;
 }
 
 function renderTests() {
   const panel = $("testsPanel");
   panel.hidden = S.mode !== "ex";
   if (panel.hidden) return;
+  panel.classList.toggle("stale", !!S.stale);
   const n = S.exId, tests = TESTS[n], res = S.testRes[n];
   const sel = Math.min(S.selTest[n] || 0, tests.length - 1);
   const mand = tests.filter((t) => !t.bonus).length;
-  $("testsHint").textContent = res ? `${tests.filter((t, k) => !t.bonus && res[k] && res[k].ok).length} of ${mand} pass` : "";
+  $("testsHint").textContent = S.stale ? "outdated: runs again when you pause" : res ? `${tests.filter((t, k) => !t.bonus && res[k] && res[k].ok).length} of ${mand} pass` : S.live && S.live.error ? "fix the syntax error to run them" : "";
   let h = '<div class="tchips">' + tests.map((t, k) => {
     const r = res && res[k];
     return `<button class="tchip${t.bonus ? " bonus" : ""}" data-test="${k}" aria-pressed="${k === sel}"><span class="r ${r ? (r.ok ? "ok" : "bad") : "idle"}">${r ? (r.ok ? "✓" : "✗") : "·"}</span>${esc(t.name.replace(/^bonus: /, ""))}${t.bonus ? '<span class="bonus-tag">bonus</span>' : ""}</button>`;
   }).join("") + "</div>";
   const r = res && res[sel];
-  h += `<div class="tdetail"><span class="watch">The memory view below shows this test running your code.</span>${r && !r.ok ? r.msgs.map((m) => `<small>${esc(m)}</small>`).join("") : ""}</div>`;
-  if (res && mandatoryOk(n, res)) {
+  if (!res && S.live && S.live.error) h += `<div class="tdetail"><p class="headline bad">Your code does not compile (line ${S.live.error.line}), so no test can run.</p></div>`;
+  else if (r && !r.ok) {
+    h += `<div class="tdetail"><p class="headline bad">${esc(headline(n, r))}</p>`;
+    h += `<details><summary>Details (${r.msgs.length})</summary>${r.msgs.map((m) => `<small>${esc(tidy(m))}</small>`).join("")}</details>`;
+    h += `<button class="link only-mobile" data-mview="viz">Watch this test run</button></div>`;
+  } else if (r) h += `<div class="tdetail"><span class="watch">This test passes. The memory view shows it running your code.</span><button class="link only-mobile" data-mview="viz">Watch it run</button></div>`;
+  if (res && !S.stale && mandatoryOk(n, res) && S.blockers && S.blockers.length) {
+    h += `<div class="allpass"><div class="banner warn">The tests pass, but the exercise is not complete yet: ${S.blockers.map(esc).join("; ")}.</div></div>`;
+  } else if (res && !S.stale && mandatoryOk(n, res)) {
     const order = PACKS[packOf(n)].order;
     const next = order[order.indexOf(n) + 1];
     const bonus = tests.filter((t) => t.bonus);
     const bonusNote = bonus.length ? (bonus.every((t) => res[tests.indexOf(t)].ok) ? " Bonus too!" : " The bonus tests are optional.") : "";
-    h += `<div class="allpass"><span class="banner ok">All mandatory tests pass${S.assisted[n] ? " (with revealed code: try it again from scratch later)" : ""}.${bonusNote}</span>${next ? `<button class="btn" data-ex="${next}">Next: ${next}</button>` : ""}</div>`;
+    h += `<div class="allpass"><span class="banner ok">Exercise complete: tests pass and the checks are clean${S.assisted[n] ? " (with revealed code: try it again from scratch later)" : ""}.${bonusNote}</span>${next ? `<button class="btn" data-ex="${next}">Next: ${next}</button>` : ""}</div>`;
   }
   $("tests").innerHTML = h;
 }
@@ -870,7 +1074,7 @@ function renderControls() {
 function renderOut() { const s = snap(); $("out").textContent = s ? s.stdout : ""; }
 
 function renderStep(scroll = true, anim = false) {
-  renderControls(); renderEditor(anim); renderNarr(); renderMemory(anim); renderFlow(anim); renderOut();
+  renderControls(); renderEditor(anim); renderCtx(); renderNarr(); renderMemory(anim); renderFlow(anim); renderOut();
   const s = snap();
   $("viewHint").textContent = s && s.file === "test" ? `test driver, line ${testLine(S.trace.a, s.line)}` : "";
   if (scroll && s && s.file === "main" && s.line && document.activeElement !== ta) scrollToLine(s.line);
@@ -882,7 +1086,7 @@ function renderAll() {
   $("modeFree").setAttribute("aria-selected", S.mode === "free");
   $("sampleWrap").hidden = S.mode !== "free";
   $("restore").hidden = S.mode !== "free" || S.restoreCode == null;
-  renderRail(); renderExCard(); renderDiag(); renderBlocks(); renderStuck(); renderTests(); renderStep(false);
+  renderRail(); renderExCard(); renderDiag(); renderStepbar(); renderBlocks(); renderStuck(); renderTests(); renderBadge(); renderStep(false);
 }
 
 // animate only a single step forward: jumps, scrubbing and stepping back stay instant
@@ -915,17 +1119,19 @@ function openExercise(id) {
   stop();
   S.mode = "ex"; S.exId = id; S.resetArmed = false;
   store.set("mode", "ex"); store.set("ex", id); store.set("packEx:" + packOf(id), id);
-  S.trace = null; S.cursorLine = 1;
+  S.trace = null; S.cursorLine = 1; S.follow = false;
   ta.value = S.code = loadCode();
   ta.scrollTop = 0;
+  fitEditor();
   analyze(); renderAll(); runNow();
 }
 
 function openFree() {
   stop();
   S.mode = "free"; store.set("mode", "free");
-  S.trace = null; S.cursorLine = 1;
+  S.trace = null; S.cursorLine = 1; S.follow = false;
   ta.value = S.code = loadCode();
+  fitEditor();
   analyze(); renderAll(); runNow();
 }
 
@@ -939,12 +1145,18 @@ $("tabMem").onclick = () => { S.tab = "mem"; $("tabMem").setAttribute("aria-sele
 $("tabFlow").onclick = () => { S.tab = "flow"; $("tabFlow").setAttribute("aria-selected", true); $("tabMem").setAttribute("aria-selected", false); $("flowView").hidden = false; $("memView").hidden = true; renderFlow(); };
 
 document.addEventListener("click", (e) => {
+  const jB = e.target.closest("[data-jump]");
+  if (jB) { const first = $("rail").querySelector(`[data-ex][data-part="${jB.dataset.jump}"]`); if (first) $("rail").scrollTo({ left: jB.offsetLeft - 8, behavior: reduceMotion() ? "auto" : "smooth" }); return; }
   const packB = e.target.closest("[data-pack]");
   if (packB) { const id = packB.dataset.pack; const last = store.get("packEx:" + id, null); openExercise(PACKS[id].order.includes(last) ? last : PACKS[id].order[0]); return; }
   const exB = e.target.closest("[data-ex]");
   if (exB) { openExercise(exB.dataset.ex); return; }
   const tB = e.target.closest("[data-test]");
-  if (tB) { S.selTest[S.exId] = +tB.dataset.test; renderTests(); runNow(); return; }
+  if (tB) { S.selTest[S.exId] = +tB.dataset.test; S.follow = false; renderTests(); runNow(); return; }
+  const gB = e.target.closest("[data-goto]");
+  if (gB) { stop(); go(+gB.dataset.goto); return; }
+  const mB = e.target.closest("[data-mview]");
+  if (mB) { setMview(mB.dataset.mview); return; }
   const rv = e.target.closest("[data-reveal]");
   if (rv) {
     const lv = S.reveal[S.exId] || (S.reveal[S.exId] = {});
@@ -952,7 +1164,7 @@ document.addEventListener("click", (e) => {
     lv[b] = (lv[b] || 1) + 1;
     if (lv[b] >= 4) { S.assisted[S.exId] = true; store.set("assisted", S.assisted); }
     store.set("reveal", S.reveal);
-    renderBlocks(); renderRail();
+    renderStepbar(); renderBlocks(); renderRail();
     return;
   }
   const ins = e.target.closest("[data-insert]");
@@ -1015,8 +1227,9 @@ function verifyProgress() {
     for (const t of TESTS[n]) if (!t.bonus) jobs.push({ n, a: assemble({ code, harness: t, library: builtin(n) }) });
   }
   const done = (results) => {
-    const status = {};
-    jobs.forEach((j, k) => { status[j.n] = status[j.n] === "fail" || !results[k].ok ? "fail" : "pass"; });
+    const status = {}, byEx = {};
+    jobs.forEach((j, k) => { (byEx[j.n] = byEx[j.n] || []).push(results[k]); status[j.n] = status[j.n] === "fail" || !results[k].ok ? "fail" : "pass"; });
+    for (const n of Object.keys(status)) if (status[n] === "pass" && blockersFor(n, store.get("code:" + n, ""), byEx[n]).length) status[n] = "fail";
     S.status = status;
     store.set("status", status);
     renderRail();
@@ -1033,5 +1246,6 @@ function verifyProgress() {
 
 /* ---------------- boot ---------------- */
 
+document.body.dataset.mview = "code";
 if (S.mode === "ex") openExercise(S.exId); else openFree();
 setTimeout(verifyProgress, 1200);
