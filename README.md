@@ -8,6 +8,12 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/ADELBYTES/libft-lens/actions/workflows/test.yml"><img src="https://github.com/ADELBYTES/libft-lens/actions/workflows/test.yml/badge.svg" alt="tests"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT license"></a>
+  <a href="https://adelbytes.github.io/libft-lens/"><img src="https://img.shields.io/badge/demo-live-brightgreen.svg" alt="live demo"></a>
+</p>
+
+<p align="center">
   <a href="https://adelbytes.github.io/libft-lens/"><b>▶ Open it online</b></a> ·
   <a href="https://adelbytes.github.io/libft-lens/docs.html#tour">2-minute tour</a> ·
   <a href="https://adelbytes.github.io/libft-lens/media/libft-lens-intro.mp4">40-second video</a> ·
